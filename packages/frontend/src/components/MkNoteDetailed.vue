@@ -187,8 +187,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-paperclip"></i>
 				</button>
 				<!-- kyunet: LLM translate button (fork-only); pressing it again hides the translation -->
-				<button v-if="kyunetTranslateButtonVisible" class="_button" :class="[$style.noteFooterButton, { [$style.noteFooterButtonActive]: translation != null }]" :aria-label="i18n.ts.translate" :aria-pressed="translation != null" @click="kyunetTranslate()">
-					<i class="ti ti-language-hiragana"></i>
+				<button v-if="kyunetTranslateButtonVisible" class="_button" :class="[$style.noteFooterButton, { [$style.noteFooterButtonActive]: translation != null }]" :aria-label="i18n.ts.translate" :aria-pressed="translation != null" :aria-busy="translating || kyunetAutoTranslating" @click="kyunetTranslate()">
+					<MkLoading v-if="translating || kyunetAutoTranslating" :em="true" :colored="false"/>
+					<i v-else class="ti ti-language-hiragana"></i>
 				</button>
 				<button ref="menuButton" class="_button" :class="$style.noteFooterButton" @mousedown.prevent="showMenu()">
 					<i class="ti ti-dots"></i>
@@ -311,6 +312,7 @@ const {
 	translation,
 	// kyunet: fork-only LLM translation
 	kyunetTranslateButtonVisible,
+	kyunetAutoTranslating,
 	kyunetTranslate,
 	muted,
 	canRenote,

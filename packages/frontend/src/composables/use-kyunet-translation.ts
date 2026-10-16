@@ -53,7 +53,9 @@ export function useKyunetTranslation(): {
 	available: ComputedRef<boolean>;
 	targetLang: string;
 	request: (ref: KyunetTranslationRef) => Ref<KyunetTranslationResult | null>;
+	peek: (ref: KyunetTranslationRef) => KyunetTranslationResult | null;
 	translateNow: (ref: KyunetTranslationRef) => Promise<KyunetTranslationResult>;
+	translateManyNow: (refs: KyunetTranslationRef[]) => Promise<KyunetTranslationResult[]>;
 } {
 	const targetLang = kyunetTargetLang();
 	const available = computed(() => isKyunetTranslationAvailable());
@@ -61,7 +63,9 @@ export function useKyunetTranslation(): {
 		available,
 		targetLang,
 		request: (ref) => available.value ? queue.request(ref, targetLang) : nullRef(),
+		peek: (ref) => queue.peek(ref, targetLang),
 		translateNow: (ref) => queue.translateNow(ref, targetLang),
+		translateManyNow: (refs) => queue.translateManyNow(refs, targetLang),
 	};
 }
 
@@ -90,6 +94,7 @@ export async function translateNoteWith(
 	translation: Ref<Misskey.entities.NotesTranslateResponse | null>,
 	translating: Ref<boolean>,
 ): Promise<void> {
+	if (translating.value) return; // a second click while a forced call is pending would send it again
 	if (translation.value != null) {
 		translation.value = null;
 		return;
