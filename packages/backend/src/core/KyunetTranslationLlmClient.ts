@@ -25,28 +25,19 @@ export class KyunetLlmError extends Error {
 
 export const MAX_COMPLETION_TOKENS_CAP = 8192;
 
-export const DEFAULT_SYSTEM_PROMPT = `You are a translation engine for a Misskey (fediverse) server. You receive a JSON object with a target language and a list of items. Translate each item into the target language and reply with a JSON object of the same shape. Reply with JSON only.
+// Deliberately short: measured against a small model (gemma-4-26B), every extra conditional rule cost compliance
+// elsewhere. Only unconditional instructions remain; "nothing to translate" is detected server-side (text unchanged).
+export const DEFAULT_SYSTEM_PROMPT = `You translate texts from a Misskey (fediverse) server into the target language given in the input. Each input item has an index i, a kind (note, user_name, user_description, user_field_name, user_field_value) and a text. Reply with JSON only.
 
-General rules
-- Each item is an independent text from a different author or context. Translate every item on its own; never carry names, topics, tone, or wording from one item into another, and never merge or swap items.
-- Keep these verbatim, never translate or alter them: URLs, @mentions, #hashtags, custom emoji shortcodes like :name:, code blocks and inline code, and MFM syntax such as $[...], <center>, <small>, **bold**, and the line "-----".
-- Parts that are already written in the target language stay verbatim.
-- Proper nouns (people, places, works, brands) must end up readable to the target-language reader: use the established target-language name when one exists, otherwise a phonetic rendering in the target script. Never leave a foreign-script name as-is just because it is a name.
-- If the same content appears in several languages, translate it once; do not repeat an existing target-language version.
-- Preserve line breaks and the overall structure.
-- Do not add explanations, notes, or quotation marks around the result.
+- Translate each item by itself; do not mix items.
+- Translate naturally in the original's tone. Keep line breaks. Add nothing of your own.
+- Keep MFM markup such as $[...] and **...** as it is, and translate the text inside.
+- Translate #hashtags too, without spaces (#今日の一枚 → #오늘의한장).
+- Write names of people and places in the target language's script (山田太郎 → 야마다 타로, 東京 → 도쿄).
 
-Per-kind rules
-- kind "note": the body of a post. Translate naturally, keeping the tone (casual, formal, playful).
-- kind "user_name": a display name. Render personal names in the target language's usual form for foreign names (transliterate: 山田太郎 → 야마다 타로 for Korean) and translate descriptive parts such as a role or status written after the name. Handles and emoji shortcodes stay in place.
-- kind "user_description": a profile bio. Translate naturally; keep lists and line structure.
-- kind "user_field_name": the label of a profile field (for example "Location", "Pronouns", "Website"). Translate as a short label.
-- kind "user_field_value": a short profile field value such as a location, pronouns, or a link label. Place names use the target language's usual name (東京 → 도쿄 for Korean); pronouns are translated to the target language's equivalent. Links stay verbatim.
-
-Output
-- For each input item return { "i": <same index>, "sourceLangs": [<BCP 47 codes, dominant first>], "text": <string> }.
-- Set text to "" only when the item is already readable as-is by a reader of the target language: it is written in the target language, or it is only code, links, emoji, symbols, or numbers. A proper noun written in a foreign script is not readable as-is; render it in the target language.
-- Return every item exactly once, in the same order, with the same indices.`;
+Output format:
+{ "items": [ { "i": <same i>, "sourceLangs": [<BCP 47 codes of the original>], "text": <translation> } ] }
+Return one output item per input item.`;
 
 /** The whole prompt (output section included) is admin-editable; `{targetLang}` is replaced with the request's target language. */
 export function buildSystemPrompt(setting: MiKyunetTranslationSetting, targetLang: string): string {
