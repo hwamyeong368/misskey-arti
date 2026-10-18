@@ -132,7 +132,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<template #value>{{ testResult.latencyMs }} ms</template>
 						</MkKeyValue>
 						<MkInfo v-if="!testResult.ok" warn>{{ testResult.error }}</MkInfo>
-						<MkKeyValue v-else-if="testResult.needsTranslation === false">
+						<MkKeyValue v-else-if="testResult.text == null">
 							<template #key>{{ i18n.ts._kyunetTranslation.result }}</template>
 							<template #value>{{ i18n.ts._kyunetTranslation.noTranslationNeeded }} ({{ (testResult.sourceLangs ?? []).join(', ') }})</template>
 						</MkKeyValue>

@@ -434,11 +434,15 @@ export class KyunetTranslationService {
 		return input.map(item => done.get(item.i) ?? null);
 	}
 
-	/** spec 5.2 step 8 + 5.3: needsTranslation=false, empty text, or text identical to the source all mean "nothing to translate". */
+	/**
+	 * spec 5.2 step 8 + 5.3: empty text or text identical to the source means "nothing to translate".
+	 * The text alone decides. The schema used to carry a needsTranslation flag; the model regularly contradicted
+	 * it (a correct translation flagged false, or the untouched source flagged true), so it was dropped.
+	 */
 	private postProcess(out: LlmOutputItem, source: string): string | null {
-		if (!out.needsTranslation) return null;
-		if (out.text === '') return null;
-		if (this.normalizeText(out.text) === source) return null;
+		const text = this.normalizeText(out.text);
+		if (text === '') return null;
+		if (text === source) return null;
 		return out.text;
 	}
 
@@ -453,12 +457,14 @@ export class KyunetTranslationService {
 	}
 
 	@bindThis
-	public async testTranslate(text: string, targetLang: string): Promise<{ ok: boolean; latencyMs: number; result?: LlmOutputItem; error?: string; raw?: unknown }> {
+	public async testTranslate(text: string, targetLang: string): Promise<{ ok: boolean; latencyMs: number; result?: { text: string | null; sourceLangs: string[] }; error?: string; raw?: unknown }> {
 		const setting = this.settingService.get();
 		const started = Date.now();
 		try {
-			const { items, raw, latencyMs } = await this.complete(setting, setting.provider, targetLang, [{ i: 0, kind: 'note', text: this.normalizeText(text) }]);
-			return { ok: true, latencyMs, result: items[0], raw };
+			const source = this.normalizeText(text);
+			const { items, raw, latencyMs } = await this.complete(setting, setting.provider, targetLang, [{ i: 0, kind: 'note', text: source }]);
+			// same verdict the real path stores: text null = nothing to translate
+			return { ok: true, latencyMs, result: { text: this.postProcess(items[0], source), sourceLangs: items[0].sourceLangs }, raw };
 		} catch (err) {
 			const reason = err instanceof KyunetLlmError ? `${err.reason}: ${err.message}` : (err instanceof Error ? err.message : String(err));
 			return { ok: false, latencyMs: Date.now() - started, error: reason };

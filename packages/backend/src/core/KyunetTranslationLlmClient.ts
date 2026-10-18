@@ -12,7 +12,7 @@ import type { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetti
 
 export type TranslationKind = 'note' | 'user_name' | 'user_description' | 'user_field_name' | 'user_field_value';
 export type LlmInputItem = { i: number; kind: TranslationKind; text: string };
-export type LlmOutputItem = { i: number; needsTranslation: boolean; sourceLangs: string[]; text: string };
+export type LlmOutputItem = { i: number; sourceLangs: string[]; text: string };
 
 export type KyunetLlmErrorReason = 'http' | 'timeout' | 'length' | 'invalid_json' | 'count_mismatch' | 'invalid_item' | 'no_choice';
 
@@ -44,8 +44,8 @@ Per-kind rules
 - kind "user_field_value": a short profile field value such as a location, pronouns, or a link label. Place names use the target language's usual name (東京 → 도쿄 for Korean); pronouns are translated to the target language's equivalent. Links stay verbatim.
 
 Output
-- For each input item return { "i": <same index>, "needsTranslation": <boolean>, "sourceLangs": [<BCP 47 codes, dominant first>], "text": <string> }.
-- Set needsTranslation to false and text to "" only when the item is already readable as-is by a reader of the target language: it is written in the target language, or it is only code, links, emoji, symbols, or numbers. A proper noun written in a foreign script is not readable as-is; render it in the target language.
+- For each input item return { "i": <same index>, "sourceLangs": [<BCP 47 codes, dominant first>], "text": <string> }.
+- Set text to "" only when the item is already readable as-is by a reader of the target language: it is written in the target language, or it is only code, links, emoji, symbols, or numbers. A proper noun written in a foreign script is not readable as-is; render it in the target language.
 - Return every item exactly once, in the same order, with the same indices.`;
 
 /** The whole prompt (output section included) is admin-editable; `{targetLang}` is replaced with the request's target language. */
@@ -68,10 +68,12 @@ const RESPONSE_FORMAT = {
 					items: {
 						type: 'object',
 						additionalProperties: false,
-						required: ['i', 'needsTranslation', 'sourceLangs', 'text'],
+						// no "needsTranslation" flag: measured against gemma-4, a flag emitted before the text made the model
+						// commit to "no translation" early and then return the source verbatim or half-translated; the server
+						// decides from the text alone (empty or equal to the source = nothing to translate)
+						required: ['i', 'sourceLangs', 'text'],
 						properties: {
 							i: { type: 'integer' },
-							needsTranslation: { type: 'boolean' },
 							sourceLangs: { type: 'array', items: { type: 'string' } },
 							text: { type: 'string' },
 						},
@@ -126,13 +128,12 @@ export function parseLlmResponse(json: unknown, expectedIndices: number[]): LlmO
 	for (const raw of items as Record<string, unknown>[]) {
 		if (
 			typeof raw?.i !== 'number'
-			|| typeof raw.needsTranslation !== 'boolean'
 			|| !Array.isArray(raw.sourceLangs) || !raw.sourceLangs.every(x => typeof x === 'string')
 			|| typeof raw.text !== 'string'
 		) {
-			throw new KyunetLlmError('invalid_item', 'item is missing i / needsTranslation / sourceLangs / text');
+			throw new KyunetLlmError('invalid_item', 'item is missing i / sourceLangs / text');
 		}
-		out.push({ i: raw.i, needsTranslation: raw.needsTranslation, sourceLangs: raw.sourceLangs as string[], text: raw.text });
+		out.push({ i: raw.i, sourceLangs: raw.sourceLangs as string[], text: raw.text });
 	}
 	const seen = new Set(out.map(x => x.i));
 	if (seen.size !== expectedIndices.length || !expectedIndices.every(i => seen.has(i))) {

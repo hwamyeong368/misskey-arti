@@ -10004,7 +10004,6 @@ export interface operations {
                         ok: boolean;
                         latencyMs: number;
                         text: string | null;
-                        needsTranslation: boolean | null;
                         sourceLangs: string[] | null;
                         error: string | null;
                         raw: string | null;

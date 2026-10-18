@@ -21,8 +21,8 @@ export const meta = {
 		properties: {
 			ok: { type: 'boolean', optional: false, nullable: false },
 			latencyMs: { type: 'integer', optional: false, nullable: false },
+			// text null with ok=true means "nothing to translate"
 			text: { type: 'string', optional: false, nullable: true },
-			needsTranslation: { type: 'boolean', optional: false, nullable: true },
 			sourceLangs: { type: 'array', optional: false, nullable: true, items: { type: 'string', optional: false, nullable: false } },
 			error: { type: 'string', optional: false, nullable: true },
 			raw: { type: 'string', optional: false, nullable: true },
@@ -50,7 +50,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				ok: r.ok,
 				latencyMs: r.latencyMs,
 				text: r.result?.text ?? null,
-				needsTranslation: r.result?.needsTranslation ?? null,
 				sourceLangs: r.result?.sourceLangs ?? null,
 				error: r.error ?? null,
 				raw: r.raw === undefined ? null : JSON.stringify(r.raw, null, 2),
