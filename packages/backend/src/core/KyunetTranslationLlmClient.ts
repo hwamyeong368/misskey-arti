@@ -124,7 +124,9 @@ export function parseLlmResponse(json: unknown, expectedIndices: number[]): LlmO
 		) {
 			throw new KyunetLlmError('invalid_item', 'item is missing i / sourceLangs / text');
 		}
-		out.push({ i: raw.i, sourceLangs: raw.sourceLangs as string[], text: raw.text });
+		// the model sometimes repeats a code (["en","en"]); keep the first occurrence, order preserved
+		const sourceLangs = [...new Set((raw.sourceLangs as string[]).map(x => x.trim()).filter(x => x !== ''))];
+		out.push({ i: raw.i, sourceLangs, text: raw.text });
 	}
 	const seen = new Set(out.map(x => x.i));
 	if (seen.size !== expectedIndices.length || !expectedIndices.every(i => seen.has(i))) {
