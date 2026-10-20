@@ -28,7 +28,21 @@ export function kyunetTargetLang(): string {
 	return miLocalStorage.getItem('lang') ?? navigator.language;
 }
 
-/** "en, ja" → "영어, 일본어" in the UI language; unknown or unsupported codes fall back to the code itself. */
+/**
+ * Drops the region from a BCP 47 tag ("ja-JP" → "ja") but keeps the script ("zh-Hant" stays): the model
+ * often answers with region-qualified tags, and Intl would render those as "일본어(일본)". Returns the
+ * input unchanged when it is not a valid tag.
+ */
+function stripRegion(code: string): string {
+	try {
+		const locale = new Intl.Locale(code);
+		return locale.script != null ? `${locale.language}-${locale.script}` : locale.language;
+	} catch {
+		return code;
+	}
+}
+
+/** "en, ja-JP" → "영어, 일본어" in the UI language; unknown or unsupported codes fall back to the code itself. */
 export function kyunetLangNames(codes: readonly string[]): string {
 	let names: Intl.DisplayNames | null = null;
 	try {
@@ -36,7 +50,7 @@ export function kyunetLangNames(codes: readonly string[]): string {
 	} catch {
 		names = null;
 	}
-	return codes.map(code => {
+	return [...new Set(codes.map(stripRegion))].map(code => {
 		try {
 			return names?.of(code) ?? code;
 		} catch {
