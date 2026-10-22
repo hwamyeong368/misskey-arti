@@ -82,11 +82,12 @@ const POLLING_INTERVAL =
 	MIN_POLLING_INTERVAL;
 
 // kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
-// `maxRequests` lets the reconnect catch-up refresh every live subscription in CAPTURE_MAX-sized chunks;
-// the polling interval keeps upstream's single request per tick.
-function fetchSnapshot(queue: Map<string, { lastAddedAt: number }>, maxRequests = 1) {
+// `maxRequests` lets the reconnect catch-up refresh every live subscription in CAPTURE_MAX-sized chunks, and
+// `maxAgeMs` lifts upstream's "skip entries older than 5 min" rule for it: a realtime subscription stays
+// active until unmount, so its snapshot must cover old entries too. The polling interval keeps upstream's values.
+function fetchSnapshot(queue: Map<string, { lastAddedAt: number }>, maxRequests = 1, maxAgeMs = 1000 * 60 * 5) {
 	const ids = [...queue.entries()]
-		.filter(([k, v]) => Date.now() - v.lastAddedAt < 1000 * 60 * 5) // 追加されてから一定時間経過したものは省く
+		.filter(([k, v]) => Date.now() - v.lastAddedAt < maxAgeMs) // 追加されてから一定時間経過したものは省く
 		.map(([k, v]) => k)
 		.sort((a, b) => (a > b ? -1 : 1)) // 新しいものを優先するためにIDで降順ソート
 		.slice(0, CAPTURE_MAX * maxRequests);
@@ -133,7 +134,7 @@ const realtimeQueue = new Map<string, {
 const REALTIME_SNAPSHOT_MAX_REQUESTS = 5;
 
 function refreshRealtimeSnapshot() {
-	fetchSnapshot(realtimeQueue, REALTIME_SNAPSHOT_MAX_REQUESTS);
+	fetchSnapshot(realtimeQueue, REALTIME_SNAPSHOT_MAX_REQUESTS, Infinity);
 }
 
 globalEvents.on('streamReconnected', refreshRealtimeSnapshot);

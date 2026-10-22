@@ -49,6 +49,14 @@ export function useStream(): Misskey.IStream {
 		heartbeat();
 	});
 
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	// When the browser regains connectivity, probe the socket right away instead of waiting for the next
+	// interval: a write on a socket the server already dropped fails and triggers the normal reconnect.
+	window.addEventListener('online', () => {
+		if (!stream) return;
+		heartbeat();
+	});
+
 	return stream;
 }
 
