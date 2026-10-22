@@ -31,6 +31,9 @@ type Events = {
 	reloadTimeline: () => void;
 	reloadNotification: () => void;
 	themeChanging: () => void;
+
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	streamReconnected: () => void;
 };
 
 export const globalEvents = new EventEmitter<Events>();

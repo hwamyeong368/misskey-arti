@@ -55,8 +55,11 @@ import { i18n } from '@/i18n.js';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { prefer } from '@/preferences.js';
 import { store } from '@/store.js';
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+import { useGlobalEvent } from '@/events.js';
 import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
-import { Paginator } from '@/utility/paginator.js';
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+import { Paginator, SECOND_FETCH_LIMIT } from '@/utility/paginator.js';
 
 const props = defineProps<{
 	excludeTypes?: typeof notificationTypes[number][] | null;
@@ -103,6 +106,13 @@ function isTop() {
 }
 
 function releaseQueue() {
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	if (reloadPending) {
+		reloadPending = false;
+		reload();
+		scrollToTop(rootEl.value!);
+		return;
+	}
 	paginator.releaseQueue();
 	scrollToTop(rootEl.value!);
 }
@@ -111,6 +121,12 @@ let scrollContainer: HTMLElement | null = null;
 
 function onScrollContainerScroll() {
 	if (isTop()) {
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		if (reloadPending) {
+			reloadPending = false;
+			reload();
+			return;
+		}
 		paginator.releaseQueue();
 	}
 }
@@ -134,8 +150,41 @@ watch(visibility, () => {
 		if (isTop()) {
 			releaseQueue();
 		}
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		catchUp();
 	}
 });
+
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+// See MkStreamingNotesTimeline.vue for the full-page / deferred-reload reasoning.
+let reloadPending = false;
+let catchingUp = false;
+
+async function catchUp() {
+	if (!store.s.realtimeMode) return;
+	if (paginator.fetching.value || paginator.fetchingNewer.value || catchingUp) return;
+	if (reloadPending) return;
+	if (paginator.items.value.length === 0) {
+		// fetchNewer without a sinceId would insert newest-first data in reverse; start over instead
+		reload();
+		return;
+	}
+
+	catchingUp = true;
+	const toQueue = !isTop() || isPausingUpdate;
+	const received = await paginator.fetchNewer({ toQueue }).finally(() => {
+		catchingUp = false;
+	});
+	if (received < SECOND_FETCH_LIMIT) return;
+
+	if (toQueue) {
+		reloadPending = true;
+	} else {
+		reload();
+	}
+}
+
+useGlobalEvent('streamReconnected', catchUp);
 
 function onNotification(notification: Misskey.entities.Notification) {
 	const isMuted = props.excludeTypes ? props.excludeTypes.includes(notification.type as typeof notificationTypes[number]) : false;

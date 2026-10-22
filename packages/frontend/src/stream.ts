@@ -6,6 +6,8 @@
 import * as Misskey from 'misskey-js';
 import { markRaw } from 'vue';
 import { $i } from '@/i.js';
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+import { globalEvents } from '@/events.js';
 import { wsOrigin } from '@@/js/config.js';
 
 // heart beat interval in ms
@@ -24,6 +26,18 @@ export function useStream(): Misskey.IStream {
 
 	if (timeoutHeartBeat) window.clearTimeout(timeoutHeartBeat);
 	timeoutHeartBeat = window.setTimeout(heartbeat, HEART_BEAT_INTERVAL);
+
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	// The first _connected_ after boot is not a reconnect; only a _connected_ that follows a _disconnected_ emits.
+	let wasDisconnected = false;
+	stream.on('_disconnected_', () => {
+		wasDisconnected = true;
+	});
+	stream.on('_connected_', () => {
+		if (!wasDisconnected) return;
+		wasDisconnected = false;
+		globalEvents.emit('streamReconnected');
+	});
 
 	// send heartbeat right now when last send time is over HEART_BEAT_INTERVAL
 	window.document.addEventListener('visibilitychange', () => {

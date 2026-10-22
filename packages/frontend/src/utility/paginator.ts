@@ -11,7 +11,9 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 const MAX_ITEMS = 30;
 const MAX_QUEUE_ITEMS = 100;
 const FIRST_FETCH_LIMIT = 15;
-const SECOND_FETCH_LIMIT = 30;
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+// exported so the reconnect catch-up can tell a full page (gap larger than the window) from a partial one
+export const SECOND_FETCH_LIMIT = 30;
 
 export type MisskeyEntity = {
 	id: string;
@@ -58,7 +60,9 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	init(): Promise<void>;
 	reload(): Promise<void>;
 	fetchOlder(): Promise<void>;
-	fetchNewer(options?: { toQueue?: boolean }): Promise<void>;
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	// resolves with the number of items the server returned (was void upstream)
+	fetchNewer(options?: { toQueue?: boolean }): Promise<number>;
 	trim(trigger?: boolean): void;
 	unshiftItems(newItems: (_T)[]): void;
 	pushItems(oldItems: (_T)[]): void;
@@ -348,9 +352,10 @@ export class Paginator<
 		}
 	}
 
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 	public async fetchNewer(options: {
 		toQueue?: boolean;
-	} = {}): Promise<void> {
+	} = {}): Promise<number> {
 		this.fetchingNewer.value = true;
 
 		const data: E['req'] = {
@@ -374,11 +379,14 @@ export class Paginator<
 		if (apiRes == null || apiRes.length === 0) {
 			this.canFetchNewer.value = false;
 			// 余計なre-renderを防止するためここで終了
-			return;
+			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+			return 0;
 		}
 
 		if (options.toQueue) {
-			this.aheadQueue.unshift(...apiRes.toReversed());
+			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+			// the WS channel is already re-subscribed while this request is in flight, so dedupe against the queue
+			this.aheadQueue.unshift(...apiRes.toReversed().filter(x => !this.aheadQueue.some(y => y.id === x.id)));
 			if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 				this.aheadQueue = this.aheadQueue.slice(0, MAX_QUEUE_ITEMS);
 			}
@@ -400,6 +408,8 @@ export class Paginator<
 		}
 		// canFetchDetectionが'safe'の場合・apiRes.length === 0 の場合は apiRes.length === 0 の場合に canFetchNewer.value = false になるが、
 		// 余計な re-render を防ぐために上部で処理している。そのため、ここでは何もしない
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		return apiRes.length;
 	}
 
 	public trim(trigger = true): void {
@@ -454,6 +464,8 @@ export class Paginator<
 	}
 
 	public enqueue(item: T): void {
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		if (this.aheadQueue.some(x => x.id === item.id)) return;
 		this.aheadQueue.unshift(item);
 		if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 			this.aheadQueue.pop();

@@ -41,30 +41,32 @@ const pollingQueue = new Map<string, {
 	lastAddedAt: number;
 }>();
 
-function pollingEnqueue(note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>) {
-	if (pollingQueue.has(note.id)) {
-		const data = pollingQueue.get(note.id)!;
-		pollingQueue.set(note.id, {
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+function pollingEnqueue(note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>, queue = pollingQueue) {
+	if (queue.has(note.id)) {
+		const data = queue.get(note.id)!;
+		queue.set(note.id, {
 			...data,
 			referenceCount: data.referenceCount + 1,
 			lastAddedAt: Date.now(),
 		});
 	} else {
-		pollingQueue.set(note.id, {
+		queue.set(note.id, {
 			referenceCount: 1,
 			lastAddedAt: Date.now(),
 		});
 	}
 }
 
-function pollingDequeue(note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>) {
-	const data = pollingQueue.get(note.id);
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+function pollingDequeue(note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>, queue = pollingQueue) {
+	const data = queue.get(note.id);
 	if (data == null) return;
 
 	if (data.referenceCount === 1) {
-		pollingQueue.delete(note.id);
+		queue.delete(note.id);
 	} else {
-		pollingQueue.set(note.id, {
+		queue.set(note.id, {
 			...data,
 			referenceCount: data.referenceCount - 1,
 		});
@@ -79,28 +81,58 @@ const POLLING_INTERVAL =
 	prefer.s.pollingInterval === 3 ? MIN_POLLING_INTERVAL :
 	MIN_POLLING_INTERVAL;
 
-// documentが非表示の間はポーリングを停止する
-createVisibilityAwareInterval(() => {
-	const ids = [...pollingQueue.entries()]
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+// `maxRequests` lets the reconnect catch-up refresh every live subscription in CAPTURE_MAX-sized chunks;
+// the polling interval keeps upstream's single request per tick.
+function fetchSnapshot(queue: Map<string, { lastAddedAt: number }>, maxRequests = 1) {
+	const ids = [...queue.entries()]
 		.filter(([k, v]) => Date.now() - v.lastAddedAt < 1000 * 60 * 5) // 追加されてから一定時間経過したものは省く
 		.map(([k, v]) => k)
 		.sort((a, b) => (a > b ? -1 : 1)) // 新しいものを優先するためにIDで降順ソート
-		.slice(0, CAPTURE_MAX);
+		.slice(0, CAPTURE_MAX * maxRequests);
 
 	if (ids.length === 0) return;
 
-	// まとめてリクエストするのではなく、個別にHTTPリクエスト投げてCDNにキャッシュさせた方がサーバーの負荷低減には良いかもしれない？
-	misskeyApi('notes/show-partial-bulk', {
-		noteIds: ids,
-	}).then((items) => {
-		for (const item of items) {
-			fetchEvent.emit(item.id, {
-				reactions: item.reactions,
-				reactionEmojis: item.reactionEmojis,
-			});
-		}
-	});
+	for (let i = 0; i < ids.length; i += CAPTURE_MAX) {
+		// まとめてリクエストするのではなく、個別にHTTPリクエスト投げてCDNにキャッシュさせた方がサーバーの負荷低減には良いかもしれない？
+		misskeyApi('notes/show-partial-bulk', {
+			noteIds: ids.slice(i, i + CAPTURE_MAX),
+		}).then((items) => {
+			for (const item of items) {
+				fetchEvent.emit(item.id, {
+					reactions: item.reactions,
+					reactionEmojis: item.reactionEmojis,
+				});
+			}
+		});
+	}
+}
+
+// documentが非表示の間はポーリングを停止する
+createVisibilityAwareInterval(() => {
+	fetchSnapshot(pollingQueue);
 }, POLLING_INTERVAL);
+
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+// Kept apart from pollingQueue: the interval above always runs, and sharing the map would start polling in realtime mode.
+const realtimeQueue = new Map<string, {
+	referenceCount: number;
+	lastAddedAt: number;
+}>();
+
+const REALTIME_SNAPSHOT_MAX_REQUESTS = 5;
+
+function refreshRealtimeSnapshot() {
+	fetchSnapshot(realtimeQueue, REALTIME_SNAPSHOT_MAX_REQUESTS);
+}
+
+globalEvents.on('streamReconnected', refreshRealtimeSnapshot);
+
+// A backgrounded tab can hold a dead socket without a close event for a while; refresh on return as well.
+window.document.addEventListener('visibilitychange', () => {
+	if (window.document.visibilityState !== 'visible') return;
+	refreshRealtimeSnapshot();
+});
 
 function pollingSubscribe(props: {
 	note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>;
@@ -165,9 +197,17 @@ function refetchUpdatedNote(id: Misskey.entities.Note['id']): void {
 
 function realtimeSubscribe(props: {
 	note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>;
+	$note: ReactiveNoteData;
 }): void {
-	const note = props.note;
+	const { note, $note } = props;
 	const connection = useStream();
+
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	function onFetched(data: Pick<Misskey.entities.Note, 'reactions' | 'reactionEmojis'>): void {
+		$note.reactions = data.reactions;
+		$note.reactionCount = Object.values(data.reactions).reduce((a, b) => a + b, 0);
+		$note.reactionEmojis = data.reactionEmojis;
+	}
 
 	function onStreamNoteUpdated(noteData: NoteUpdatedEvent): void {
 		const { type, id, body } = noteData;
@@ -228,10 +268,16 @@ function realtimeSubscribe(props: {
 
 	capture(true);
 	connection.on('_connected_', onStreamConnected);
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	pollingEnqueue(note, realtimeQueue);
+	fetchEvent.on(note.id, onFetched);
 
 	onUnmounted(() => {
 		decapture(true);
 		connection.off('_connected_', onStreamConnected);
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		pollingDequeue(note, realtimeQueue);
+		fetchEvent.off(note.id, onFetched);
 	});
 }
 
@@ -394,6 +440,8 @@ export function useNoteCapture(props: {
 		if ($i && store.s.realtimeMode) {
 			realtimeSubscribe({
 				note,
+				// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+				$note,
 			});
 		} else {
 			pollingSubscribe({
