@@ -94,15 +94,25 @@ function fetchSnapshot(queue: Map<string, { lastAddedAt: number }>, maxRequests 
 	if (ids.length === 0) return;
 
 	for (let i = 0; i < ids.length; i += CAPTURE_MAX) {
+		const chunk = ids.slice(i, i + CAPTURE_MAX);
 		// まとめてリクエストするのではなく、個別にHTTPリクエスト投げてCDNにキャッシュさせた方がサーバーの負荷低減には良いかもしれない？
 		misskeyApi('notes/show-partial-bulk', {
-			noteIds: ids.slice(i, i + CAPTURE_MAX),
+			noteIds: chunk,
 		}).then((items) => {
 			for (const item of items) {
 				fetchEvent.emit(item.id, {
 					reactions: item.reactions,
 					reactionEmojis: item.reactionEmojis,
 				});
+			}
+
+			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+			// The server omits notes that no longer exist or are no longer visible, so a missing id is treated as
+			// deleted. An empty response is skipped: signed-out with ugcVisibilityForVisitor=none returns [] for everything.
+			if ($i == null || items.length === 0) return;
+			const returned = new Set(items.map(x => x.id));
+			for (const id of chunk) {
+				if (!returned.has(id)) globalEvents.emit('noteDeleted', id);
 			}
 		});
 	}
