@@ -2,9 +2,9 @@
  * SPDX-FileCopyrightText: syuilo and misskey-project
  * SPDX-License-Identifier: AGPL-3.0-only
  */
-// kyunet: Fork-only LLM translation service (spec 5.2 / 5.4). Resolves references to source text,
-// consults the script gate and the hash cache, batches cache misses into LLM calls behind a Redis
-// semaphore, and stores results. Also owns cache cleanup and the admin test / stats helpers.
+// kyunet: feat/llm-translation - feat/translation-inflight-lock
+// Fork-only LLM translation service (spec 5.2 / 5.4): resolve refs, gate, hash cache, Redis semaphore + per-hash
+// in-flight lock, LLM batches, cache cleanup and admin helpers.
 
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
@@ -59,7 +59,14 @@ export type ClearCacheFilter =
 	| { noteId: string };
 
 type Resolved = { ok: true; kind: TranslationKind; text: string } | { ok: false };
-type WorkUnit = { hash: string; kind: TranslationKind; text: string; indices: number[] };
+type WorkUnit = {
+	hash: string;
+	kind: TranslationKind;
+	text: string;
+	indices: number[];
+	/** this request owns the in-flight lock for the hash and must release it after the cache write */
+	locked: boolean;
+};
 // arti: a piece of a work unit (the whole text, or one piece of a long text)
 type Part = { unitHash: string; k: number; kind: TranslationKind; text: string };
 type PartOut = { out: LlmOutputItem; provider: KyunetTranslationProvider } | null;
@@ -79,6 +86,9 @@ const FAILED = frozenEmptyResult('failed');
 
 const SEMAPHORE_POLL_MS = 250;
 const SEMAPHORE_MAX_WAIT_MS = 10000;
+// per-hash in-flight lock; design and numbers in FORK-SPEC.md § LLM 번역 진행 중 락
+const INFLIGHT_POLL_MS = 250;
+const INFLIGHT_LOCK_MARGIN_MS = 2000;
 const STAT_FIELDS = ['gateSkipped', 'cacheHits', 'llmItems', 'llmCalls', 'llmFailures'] as const;
 type StatField = typeof STAT_FIELDS[number];
 
@@ -132,6 +142,10 @@ export class KyunetTranslationService {
 
 	private get statsKey(): string {
 		return `${this.config.redis.prefix}:kyunet:translation:stats`;
+	}
+
+	private inflightKey(langKey: string, hash: string): string {
+		return `${this.config.redis.prefix}:kyunet:translation:inflight:${langKey}:${hash}`;
 	}
 
 	@bindThis
@@ -240,6 +254,47 @@ export class KyunetTranslationService {
 		}
 	}
 
+	private inflightTtlMs(setting: MiKyunetTranslationSetting): number {
+		return setting.timeoutMs + SEMAPHORE_MAX_WAIT_MS + INFLIGHT_LOCK_MARGIN_MS;
+	}
+
+	/** 'unknown' = Redis failed; the caller translates without a lock. */
+	private async tryLockInflight(setting: MiKyunetTranslationSetting, langKey: string, hash: string): Promise<'owned' | 'held' | 'unknown'> {
+		try {
+			const r = await this.redisClient.set(this.inflightKey(langKey, hash), '1', 'PX', this.inflightTtlMs(setting), 'NX');
+			return r === 'OK' ? 'owned' : 'held';
+		} catch (err) {
+			this.logger.warn(`in-flight lock failed; translating without it: ${err instanceof Error ? err.message : String(err)}`);
+			return 'unknown';
+		}
+	}
+
+	/** Resolves when the lock is gone; the deadline is only a guard in case the key outlives its TTL. */
+	private async waitInflight(setting: MiKyunetTranslationSetting, langKey: string, hash: string): Promise<void> {
+		const deadline = Date.now() + this.inflightTtlMs(setting) + INFLIGHT_LOCK_MARGIN_MS;
+		const key = this.inflightKey(langKey, hash);
+		for (;;) {
+			try {
+				if ((await this.redisClient.exists(key)) === 0) return;
+			} catch (err) {
+				this.logger.warn(`in-flight lock poll failed; translating without it: ${err instanceof Error ? err.message : String(err)}`);
+				return;
+			}
+			if (Date.now() >= deadline) return;
+			await sleep(INFLIGHT_POLL_MS);
+		}
+	}
+
+	private async unlockInflight(langKey: string, units: WorkUnit[]): Promise<void> {
+		const keys = units.filter(u => u.locked).map(u => this.inflightKey(langKey, u.hash));
+		if (keys.length === 0) return;
+		try {
+			await this.redisClient.del(...keys);
+		} catch (err) {
+			this.logger.warn(`in-flight unlock failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+
 	private incrStat(field: StatField, by = 1): void {
 		this.redisClient.hincrby(this.statsKey, field, by).catch(err => this.logger.warn(`stats update failed: ${err}`));
 	}
@@ -289,46 +344,96 @@ export class KyunetTranslationService {
 			}
 			const unit = work.get(p.hash);
 			if (unit) unit.indices.push(p.index);
-			else work.set(p.hash, { hash: p.hash, kind: p.kind, text: p.text, indices: [p.index] });
+			else work.set(p.hash, { hash: p.hash, kind: p.kind, text: p.text, indices: [p.index], locked: false });
 		}
 		if (cacheHits > 0) this.incrStat('cacheHits', cacheHits);
 		if (work.size === 0) return results;
 
-		// 5. split long texts (arti), batch, 6-9. run
-		const plans = [...work.values()].map(unit => ({ unit, pieces: this.piecesFor(unit, setting) }));
-		const parts: Part[] = plans.flatMap(({ unit, pieces }) => pieces.map((piece, k) => ({ unitHash: unit.hash, k, kind: unit.kind, text: piece.text })));
-		const outputs = new Map<Part, PartOut>();
-		const batches = this.chunk(parts, setting);
-		await Promise.all(batches.map(async batch => {
-			const outs = await this.runBatch(batch, setting, targetLang);
-			batch.forEach((part, j) => outputs.set(part, outs[j]));
+		// 5. in-flight lock (kyunet): owned units go to the LLM now, held units wait for the other holder's row. force never waits.
+		const units = [...work.values()];
+		const owned: WorkUnit[] = [];
+		const waiting: WorkUnit[] = [];
+		await Promise.all(units.map(async unit => {
+			const lock = await this.tryLockInflight(setting, langKey, unit.hash);
+			unit.locked = lock === 'owned';
+			if (lock === 'held' && !force) waiting.push(unit);
+			else owned.push(unit);
 		}));
 
-		// 7-9. glue the pieces back, fill results, store
-		const rows: MiKyunetTranslation[] = [];
-		for (const { unit, pieces } of plans) {
-			const partOuts = parts.filter(part => part.unitHash === unit.hash).map(part => outputs.get(part) ?? null);
-			if (partOuts.some(o => o == null)) {
-				for (const idx of unit.indices) results[idx] = FAILED;
-				continue;
-			}
-			const done = partOuts as NonNullable<PartOut>[];
-			const merged = this.mergePieces(pieces, done);
-			const translated = this.postProcess(merged, unit.text);
-			const providers = new Set(done.map(o => o.provider));
-			const model = [...providers].map(p => p === 'deepl' ? 'deepl' : (setting.model ?? '')).join('+');
-			const provider = providers.size > 1 ? 'mixed' : (providers.has('deepl') ? 'deepl' : 'llm');
-			rows.push({ contentHash: unit.hash, targetLang: langKey, text: translated, sourceLangs: merged.sourceLangs, provider, model, createdAt: new Date() });
-			for (const idx of unit.indices) results[idx] = { status: 'ok', text: translated, sourceLangs: merged.sourceLangs };
-		}
-
-		// a failed cache write only loses the cache entry; the translations are already in `results`
-		try {
-			await this.upsert(rows, force);
-		} catch (err) {
-			this.logger.warn(`storing translations failed: ${err instanceof Error ? err.message : String(err)}`);
-		}
+		// 6. split long texts (arti), batch, 7-10. run
+		await Promise.all([
+			this.runUnits(owned, setting, targetLang, langKey, force, results),
+			this.runAfterWait(waiting, setting, langKey, results),
+		]);
 		return results;
+	}
+
+	/** arti: owned units: split long texts, batch, run, glue back, store, then release the in-flight lock. */
+	private async runUnits(units: WorkUnit[], setting: MiKyunetTranslationSetting, targetLang: string, langKey: string, force: boolean, results: TranslationResult[]): Promise<void> {
+		if (units.length === 0) return;
+		try {
+			const plans = units.map(unit => ({ unit, pieces: this.piecesFor(unit, setting) }));
+			const parts: Part[] = plans.flatMap(({ unit, pieces }) => pieces.map((piece, k) => ({ unitHash: unit.hash, k, kind: unit.kind, text: piece.text })));
+			const outputs = new Map<Part, PartOut>();
+			const batches = this.chunk(parts, setting);
+			await Promise.all(batches.map(async batch => {
+				const outs = await this.runBatch(batch, setting, targetLang);
+				batch.forEach((part, j) => outputs.set(part, outs[j]));
+			}));
+
+			// 7-9. glue the pieces back, fill results, store
+			const rows: MiKyunetTranslation[] = [];
+			for (const { unit, pieces } of plans) {
+				const partOuts = parts.filter(part => part.unitHash === unit.hash).map(part => outputs.get(part) ?? null);
+				if (partOuts.some(o => o == null)) {
+					for (const idx of unit.indices) results[idx] = FAILED;
+					continue;
+				}
+				const done = partOuts as NonNullable<PartOut>[];
+				const merged = this.mergePieces(pieces, done);
+				const translated = this.postProcess(merged, unit.text);
+				const providers = new Set(done.map(o => o.provider));
+				const model = [...providers].map(p => p === 'deepl' ? 'deepl' : (setting.model ?? '')).join('+');
+				const provider = providers.size > 1 ? 'mixed' : (providers.has('deepl') ? 'deepl' : 'llm');
+				rows.push({ contentHash: unit.hash, targetLang: langKey, text: translated, sourceLangs: merged.sourceLangs, provider, model, createdAt: new Date() });
+				for (const idx of unit.indices) results[idx] = { status: 'ok', text: translated, sourceLangs: merged.sourceLangs };
+			}
+
+			// a failed cache write only loses the cache entry; the translations are already in `results`
+			try {
+				await this.upsert(rows, force);
+			} catch (err) {
+				this.logger.warn(`storing translations failed: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		} finally {
+			// must come after the upsert: a waiter re-reads the cache the moment the lock is gone
+			await this.unlockInflight(langKey, units);
+		}
+	}
+
+	/** Waits for the other holder of each unit, then serves its row; a unit still missing afterwards is 'failed' (no retry here). */
+	private async runAfterWait(units: WorkUnit[], setting: MiKyunetTranslationSetting, langKey: string, results: TranslationResult[]): Promise<void> {
+		if (units.length === 0) return;
+		await Promise.all(units.map(unit => this.waitInflight(setting, langKey, unit.hash)));
+
+		let rows: MiKyunetTranslation[] = [];
+		try {
+			rows = await this.translationsRepository.findBy({ contentHash: In(units.map(u => u.hash)), targetLang: langKey });
+		} catch (err) {
+			this.logger.warn(`cache re-read after in-flight wait failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
+		const rowMap = new Map(rows.map(row => [row.contentHash, row]));
+		let hits = 0;
+		for (const unit of units) {
+			const hit = rowMap.get(unit.hash);
+			if (hit != null) {
+				hits++;
+				for (const idx of unit.indices) results[idx] = { status: 'ok', text: hit.text, sourceLangs: hit.sourceLangs };
+			} else {
+				for (const idx of unit.indices) results[idx] = FAILED;
+			}
+		}
+		if (hits > 0) this.incrStat('cacheHits', hits);
 	}
 
 	/** arti: long texts are translated in pieces by the LLM provider so one item cannot blow the token budget. */
