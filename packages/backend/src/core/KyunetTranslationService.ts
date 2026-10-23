@@ -92,6 +92,10 @@ const INFLIGHT_LOCK_MARGIN_MS = 2000;
 const STAT_FIELDS = ['gateSkipped', 'cacheHits', 'llmItems', 'llmCalls', 'llmFailures'] as const;
 type StatField = typeof STAT_FIELDS[number];
 
+function stripWhitespace(text: string): string {
+	return text.replace(/\s+/g, '');
+}
+
 // global setTimeout on purpose: vitest fake timers patch it, but not node:timers/promises
 function sleep(ms: number): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, ms));
@@ -540,14 +544,14 @@ export class KyunetTranslationService {
 	}
 
 	/**
-	 * spec 5.2 step 8 + 5.3: empty text or text identical to the source means "nothing to translate".
-	 * The text alone decides. The schema used to carry a needsTranslation flag; the model regularly contradicted
-	 * it (a correct translation flagged false, or the untouched source flagged true), so it was dropped.
+	 * Empty text or text that equals the source up to whitespace means "nothing to translate".
+	 * The text alone decides; the model's sourceLangs is not trusted for this (it labels an untouched
+	 * Korean source as 'ja' and re-spaces it rather than admit there was nothing to do).
 	 */
 	private postProcess(out: LlmOutputItem, source: string): string | null {
 		const text = this.normalizeText(out.text);
 		if (text === '') return null;
-		if (text === source) return null;
+		if (stripWhitespace(text) === stripWhitespace(source)) return null;
 		return out.text;
 	}
 
