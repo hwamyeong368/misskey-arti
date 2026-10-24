@@ -152,9 +152,11 @@ function pollingSubscribe(props: {
 	const { note, $note } = props;
 
 	function onFetched(data: Pick<Misskey.entities.Note, 'reactions' | 'reactionEmojis'>): void {
-		$note.reactions = data.reactions;
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		// Upstream assigned as is; the copy keeps subscribers of one note from sharing (and double-incrementing) it.
+		$note.reactions = { ...data.reactions };
 		$note.reactionCount = Object.values(data.reactions).reduce((a, b) => a + b, 0);
-		$note.reactionEmojis = data.reactionEmojis;
+		$note.reactionEmojis = { ...data.reactionEmojis };
 	}
 
 	pollingEnqueue(note);
@@ -215,9 +217,9 @@ function realtimeSubscribe(props: {
 
 	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 	function onFetched(data: Pick<Misskey.entities.Note, 'reactions' | 'reactionEmojis'>): void {
-		$note.reactions = data.reactions;
+		$note.reactions = { ...data.reactions };
 		$note.reactionCount = Object.values(data.reactions).reduce((a, b) => a + b, 0);
-		$note.reactionEmojis = data.reactionEmojis;
+		$note.reactionEmojis = { ...data.reactionEmojis };
 	}
 
 	function onStreamNoteUpdated(noteData: NoteUpdatedEvent): void {
