@@ -316,17 +316,17 @@ describe('Note', () => {
 			});
 
 			/**
-			 * TODO: this may be unexpected behavior?
-			 *       @see https://github.com/misskey-dev/misskey/issues/12409
+			 * bscone federates the emoji `sensitive` flag, so the receiving server knows a remote emoji is sensitive
+			 * and nonSensitiveOnly now applies to remote users too (resolves the old TODO for misskey-dev/misskey#12409).
 			 */
-			test('Even if nonSensitiveOnly, remote users can react with sensitive emoji, and it is not converted', async () => {
+			test('If nonSensitiveOnly, a remote user\'s sensitive emoji reaction is converted to like', async () => {
 				const note = (await alice.client.request('notes/create', { text: 'a', reactionAcceptance: 'nonSensitiveOnly' })).createdNote;
 				const noteInB = await resolveRemoteNote('a.test', note.id, bob);
 				const emoji = await addCustomEmoji('b.test', { isSensitive: true });
 				await bob.client.request('notes/reactions/create', { noteId: noteInB.id, reaction: `:${emoji.name}:` });
 
 				const reactions = await waitForReactions(note.id, 1);
-				strictEqual(reactions[0].type, `:${emoji.name}@b.test:`);
+				strictEqual(reactions[0].type, '❤');
 			});
 		});
 	});
