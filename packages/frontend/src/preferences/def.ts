@@ -295,6 +295,10 @@ export const PREF_DEF = definePreferences({
 	showRemoteAvatarDecorations: {
 		default: true,
 	},
+	// arti: show animated avatar decorations as still images (other animated images keep playing)
+	disableAnimatedAvatarDecorations: {
+		default: false,
+	},
 	mutedAvatarDecorationUsers: {
 		accountDependent: true,
 		default: [] as string[],
