@@ -418,7 +418,24 @@ export function getUserMenu(user: Misskey.entities.UserDetailed, router: Router 
 				}
 				await os.success();
 			},
-		}, {
+		});
+
+		// arti: pick this user's decorations one by one to hide them on everyone
+		if (user.avatarDecorations.length > 0) {
+			menuItems.push({
+				icon: 'ti ti-sparkles',
+				text: i18n.ts.avatarDecoMuteEach,
+				action: () => {
+					const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkAvatarDecorationMuteDialog.vue')), {
+						urls: user.avatarDecorations.map(d => d.url),
+					}, {
+						closed: () => dispose(),
+					});
+				},
+			});
+		}
+
+		menuItems.push({
 			icon: 'ti ti-ban',
 			text: user.isBlocking ? i18n.ts.unblock : i18n.ts.block,
 			action: toggleBlock,

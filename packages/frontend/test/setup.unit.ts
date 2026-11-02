@@ -63,6 +63,7 @@ export const preferState: Record<string, unknown> = {
 	showAvatarDecorations: true,
 	showRemoteAvatarDecorations: true,
 	mutedAvatarDecorationUsers: [],
+	mutedAvatarDecorations: [],
 };
 
 export let preferReactive: Record<string, Ref<unknown>> = {};

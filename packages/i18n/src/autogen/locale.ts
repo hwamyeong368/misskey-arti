@@ -633,6 +633,18 @@ export interface Locale extends ILocale {
      */
     "avatarDecoUnmute": string;
     /**
+     * アバター装飾を選んでミュート
+     */
+    "avatarDecoMuteEach": string;
+    /**
+     * タップした装飾は、誰が付けていても表示されなくなります。もう一度タップすると解除します。
+     */
+    "avatarDecoMuteEachDescription": string;
+    /**
+     * ミュートしたアバター装飾
+     */
+    "mutedAvatarDecorations": string;
+    /**
      * リノートのミュートを解除
      */
     "renoteUnmute": string;

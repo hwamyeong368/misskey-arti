@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	</div>
 	<template v-if="showDecoration">
 		<img
-			v-for="decoration in decorations ?? user.avatarDecorations"
+			v-for="decoration in decorations ?? visibleUserDecorations"
 			:class="[$style.decoration, { [$style.decorationBlink]: getDecorationIsBrink(decoration) }]"
 			:src="getDecorationUrl(decoration)"
 			:style="{
@@ -88,6 +88,9 @@ const emit = defineEmits<{
 
 // bscone: react to avatar decoration mute toggles without a reload; remote users' decorations can be hidden separately
 const showDecoration = computed(() => (props.forceShowDecoration || (prefer.r.showAvatarDecorations.value && (props.user.host == null || prefer.r.showRemoteAvatarDecorations.value))) && !prefer.r.mutedAvatarDecorationUsers.value.includes(props.user.id));
+
+// arti: hide decorations muted one by one (by image URL)
+const visibleUserDecorations = computed(() => props.user.avatarDecorations.filter(d => !prefer.r.mutedAvatarDecorations.value.includes(d.url)));
 
 const bound = computed(() => props.link
 	? { to: userPage(props.user), target: props.target }

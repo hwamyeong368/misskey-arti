@@ -299,6 +299,11 @@ export const PREF_DEF = definePreferences({
 		accountDependent: true,
 		default: [] as string[],
 	},
+	// arti: individual avatar decorations hidden for everyone, keyed by image URL
+	mutedAvatarDecorations: {
+		accountDependent: true,
+		default: [] as string[],
+	},
 	numberOfPageCache: {
 		default: 3,
 	},
