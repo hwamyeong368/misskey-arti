@@ -58,6 +58,11 @@ export const preferState: Record<string, unknown> = {
 	},
 
 	mutingEmojis: [],
+
+	// bscone: MkAvatar reads these through prefer.r
+	showAvatarDecorations: true,
+	showRemoteAvatarDecorations: true,
+	mutedAvatarDecorationUsers: [],
 };
 
 export let preferReactive: Record<string, Ref<unknown>> = {};
