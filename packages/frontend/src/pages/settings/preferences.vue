@@ -91,6 +91,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 									</MkPreferenceContainer>
 								</SearchMarker>
 
+								<!-- arti: stop only animated avatar decorations -->
+								<SearchMarker :keywords="['avatar', 'icon', 'decoration', 'animation', 'stop']">
+									<MkPreferenceContainer k="disableAnimatedAvatarDecorations">
+										<MkSwitch v-model="disableAnimatedAvatarDecorations">
+											<template #label><SearchLabel>{{ i18n.ts.disableAnimatedAvatarDecorations }}</SearchLabel></template>
+										</MkSwitch>
+									</MkPreferenceContainer>
+								</SearchMarker>
+
 								<!-- arti: list of individually muted decorations (unmute from here) -->
 								<SearchMarker :keywords="['avatar', 'icon', 'decoration', 'mute']">
 									<MkButton @click="openMutedAvatarDecorations"><i class="ti ti-sparkles"></i> {{ i18n.ts.mutedAvatarDecorations }}</MkButton>
@@ -964,6 +973,7 @@ const enableSeasonalScreenEffect = prefer.model('enableSeasonalScreenEffect');
 const disableCatSpeech = prefer.model('disableCatSpeech');
 const showAvatarDecorations = prefer.model('showAvatarDecorations');
 const showRemoteAvatarDecorations = prefer.model('showRemoteAvatarDecorations');
+const disableAnimatedAvatarDecorations = prefer.model('disableAnimatedAvatarDecorations');
 
 function openMutedAvatarDecorations() {
 	const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkAvatarDecorationMuteDialog.vue')), {
@@ -972,6 +982,7 @@ function openMutedAvatarDecorations() {
 		closed: () => dispose(),
 	});
 }
+
 const nsfw = prefer.model('nsfw');
 const emojiStyle = prefer.model('emojiStyle');
 const useBlurEffectForModal = prefer.model('useBlurEffectForModal');
