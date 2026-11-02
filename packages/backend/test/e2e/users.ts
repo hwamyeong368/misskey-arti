@@ -775,7 +775,8 @@ describe('ユーザー', () => {
 		{ label: '自分', parameters: { username: 'alice' }, user: () => [alice] },
 		{ label: '自分かつusernameが大文字', parameters: { username: 'ALICE' }, user: () => [alice] },
 		{ label: 'ローカルのフォロイーでノートなし', parameters: { username: 'userFollowedByAlice' }, user: () => [userFollowedByAlice] },
-		{ label: 'ローカルでノートなしは検索に載らない', parameters: { username: 'userNoNote' }, user: () => [] },
+		// bscone: users who have never posted (updatedAt IS NULL) are searchable too (UserSearchService)
+		{ label: 'ローカルでノートなしも検索に載る', parameters: { username: 'userNoNote' }, user: () => [userNoNote] },
 		{ label: 'ローカルの他人1', parameters: { username: 'bob' }, user: () => [bob] },
 		{ label: 'ローカルの他人2', parameters: { username: 'bob', host: null }, user: () => [bob] },
 		{ label: 'ローカルの他人3', parameters: { username: 'bob', host: '.' }, user: () => [bob] },
