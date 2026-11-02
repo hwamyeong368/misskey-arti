@@ -104,7 +104,7 @@ function onClick(ev: PointerEvent): void {
 }
 
 function getDecorationUrl(decoration: Decoration | DecorationEditorDecoration) {
-	if (prefer.s.disableShowingAnimatedImages || prefer.s.dataSaver.avatar) return getStaticImageUrl(decoration.url);
+	if (prefer.s.disableShowingAnimatedImages || prefer.s.dataSaver.avatar || prefer.s.disableAnimatedAvatarDecorations) return getStaticImageUrl(decoration.url);
 	return decoration.url;
 }
 
@@ -125,6 +125,7 @@ function getDecorationOffset(decoration: Decoration | DecorationEditorDecoration
 }
 
 function getDecorationIsBrink(decoration: Decoration | DecorationEditorDecoration) {
+	if (prefer.s.disableAnimatedAvatarDecorations) return false;
 	return 'blink' in decoration && decoration.blink === true;
 }
 
