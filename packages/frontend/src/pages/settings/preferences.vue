@@ -814,6 +814,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 										{ label: i18n.ts._serverDisconnectedBehavior.reload, value: 'reload' },
 										{ label: i18n.ts._serverDisconnectedBehavior.dialog, value: 'dialog' },
 										{ label: i18n.ts._serverDisconnectedBehavior.quiet, value: 'quiet' },
+										{ label: i18n.ts._serverDisconnectedBehavior.none, value: 'none' },
 									]"
 								>
 									<template #label><SearchLabel>{{ i18n.ts.whenServerDisconnected }}</SearchLabel></template>
