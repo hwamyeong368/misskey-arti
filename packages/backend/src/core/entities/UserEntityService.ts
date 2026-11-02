@@ -500,6 +500,8 @@ export class UserEntityService implements OnModuleInit {
 				flipH: ud.flipH || undefined,
 				offsetX: ud.offsetX || undefined,
 				offsetY: ud.offsetY || undefined,
+				scale: ud.scale || undefined,
+				opacity: ud.opacity || undefined,
 				url: decorations.find(d => d.id === ud.id)!.url,
 			}))) : [],
 			isBot: user.isBot,
