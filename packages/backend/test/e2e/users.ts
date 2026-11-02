@@ -83,6 +83,8 @@ describe('ユーザー', () => {
 			pinnedPage: user.pinnedPage,
 			publicReactions: user.publicReactions,
 			followingVisibility: user.followingVisibility,
+			// bscone fields
+			bridgeHomeVisibility: user.bridgeHomeVisibility,
 			followersVisibility: user.followersVisibility,
 			chatScope: user.chatScope,
 			canChat: user.canChat,
@@ -130,6 +132,10 @@ describe('ユーザー', () => {
 			preventAiLearning: user.preventAiLearning,
 			isExplorable: user.isExplorable,
 			isDeleted: user.isDeleted,
+			// bscone fields
+			autoDeleteNotesAfterDays: user.autoDeleteNotesAfterDays,
+			autoDeleteKeepFavorites: user.autoDeleteKeepFavorites,
+			autoDeleteKeepDriveFiles: user.autoDeleteKeepDriveFiles,
 			twoFactorBackupCodesStock: user.twoFactorBackupCodesStock,
 			hideOnlineStatus: user.hideOnlineStatus,
 			hasUnreadSpecifiedNotes: user.hasUnreadSpecifiedNotes,
