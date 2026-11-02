@@ -178,6 +178,15 @@ export type paths = {
          */
         post: operations['admin___avatar-decorations___delete'];
     };
+    '/admin/avatar-decorations/import-from-remote-user': {
+        /**
+         * admin/avatar-decorations/import-from-remote-user
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:avatar-decorations*
+         */
+        post: operations['admin___avatar-decorations___import-from-remote-user'];
+    };
     '/admin/avatar-decorations/list': {
         /**
          * admin/avatar-decorations/list
@@ -7174,6 +7183,88 @@ export interface operations {
             204: {
                 headers: {
                     [name: string]: unknown;
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'admin___avatar-decorations___import-from-remote-user': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    userId: string;
+                    decorationId: string;
+                    name: string;
+                    description?: string;
+                    category?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** Format: id */
+                        id: string;
+                        /** Format: date-time */
+                        createdAt: string;
+                        /** Format: date-time */
+                        updatedAt: string | null;
+                        name: string;
+                        description: string;
+                        url: string;
+                        roleIdsThatCanBeUsedThisDecoration: string[];
+                        category: string | null;
+                    };
                 };
             };
             /** @description Client error */

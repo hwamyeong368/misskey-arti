@@ -29,6 +29,7 @@ export * as 'admin/announcements/list' from './endpoints/admin/announcements/lis
 export * as 'admin/announcements/update' from './endpoints/admin/announcements/update.js';
 export * as 'admin/avatar-decorations/create' from './endpoints/admin/avatar-decorations/create.js';
 export * as 'admin/avatar-decorations/delete' from './endpoints/admin/avatar-decorations/delete.js';
+export * as 'admin/avatar-decorations/import-from-remote-user' from './endpoints/admin/avatar-decorations/import-from-remote-user.js';
 export * as 'admin/avatar-decorations/list' from './endpoints/admin/avatar-decorations/list.js';
 export * as 'admin/avatar-decorations/update' from './endpoints/admin/avatar-decorations/update.js';
 export * as 'admin/captcha/current' from './endpoints/admin/captcha/current.js';

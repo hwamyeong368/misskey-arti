@@ -645,6 +645,14 @@ export interface Locale extends ILocale {
      */
     "mutedAvatarDecorations": string;
     /**
+     * アバター装飾をこのサーバーに取り込む
+     */
+    "importAvatarDecoration": string;
+    /**
+     * 取り込みたい装飾をタップして名前を付けてください。画像はこのサーバーのドライブに保存されます。
+     */
+    "importAvatarDecorationDescription": string;
+    /**
      * リノートのミュートを解除
      */
     "renoteUnmute": string;

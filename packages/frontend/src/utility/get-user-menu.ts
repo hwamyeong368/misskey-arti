@@ -435,6 +435,21 @@ export function getUserMenu(user: Misskey.entities.UserDetailed, router: Router 
 			});
 		}
 
+		// arti: copy a remote user's decoration into this server (decoration managers only)
+		if (user.host != null && user.avatarDecorations.length > 0 && $i && ($i.isAdmin || $i.policies.canManageAvatarDecorations)) {
+			menuItems.push({
+				icon: 'ti ti-download',
+				text: i18n.ts.importAvatarDecoration,
+				action: () => {
+					const { dispose } = os.popup(defineAsyncComponent(() => import('@/components/MkAvatarDecorationImportDialog.vue')), {
+						user,
+					}, {
+						closed: () => dispose(),
+					});
+				},
+			});
+		}
+
 		menuItems.push({
 			icon: 'ti ti-ban',
 			text: user.isBlocking ? i18n.ts.unblock : i18n.ts.block,
