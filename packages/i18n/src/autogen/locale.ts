@@ -9041,6 +9041,10 @@ export interface Locale extends ILocale {
          * 控えめに警告
          */
         "quiet": string;
+        /**
+         * 警告なし
+         */
+        "none": string;
     };
     "_channel": {
         /**
