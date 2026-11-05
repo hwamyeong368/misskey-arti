@@ -168,6 +168,9 @@ export const paramDef = {
 				flipH: { type: 'boolean', nullable: true },
 				offsetX: { type: 'number', nullable: true, maximum: 0.25, minimum: -0.25 },
 				offsetY: { type: 'number', nullable: true, maximum: 0.25, minimum: -0.25 },
+				// arti: from CherryPick (same ranges as CherryPick's i/update and RemoteAvatarDecorationService)
+				scale: { type: 'number', nullable: true, maximum: 1.5, minimum: 0.5 },
+				opacity: { type: 'number', nullable: true, maximum: 1, minimum: 0.1 },
 			},
 			required: ['id'],
 		} },
@@ -443,6 +446,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					flipH: d.flipH ?? false,
 					offsetX: d.offsetX ?? 0,
 					offsetY: d.offsetY ?? 0,
+					scale: d.scale ?? 1,
+					opacity: d.opacity ?? 1,
 				}));
 			}
 

@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <MkModalWindow
 	ref="dialog"
 	:width="400"
-	:height="450"
+	:height="600"
 	@close="cancel"
 	@closed="emit('closed')"
 >
@@ -28,6 +28,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</MkRange>
 				<MkRange v-model="offsetY" continuousUpdate :min="-0.25" :max="0.25" :step="0.025" :textConverter="(v) => `${Math.floor(v * 100)}%`">
 					<template #label>Y {{ i18n.ts.position }}</template>
+				</MkRange>
+				<!-- arti: scale / opacity from CherryPick -->
+				<MkRange v-model="scale" continuousUpdate :min="0.5" :max="1.5" :step="0.05" :textConverter="(v) => `${v.toFixed(2)}x`">
+					<template #label>{{ i18n.ts.scale }}</template>
+				</MkRange>
+				<MkRange v-model="opacity" continuousUpdate :min="0.1" :max="1" :step="0.01" :textConverter="(v) => `${Math.round(v * 100)}%`">
+					<template #label>{{ i18n.ts.opacity }}</template>
 				</MkRange>
 				<MkSwitch v-model="flipH">
 					<template #label>{{ i18n.ts.flip }}</template>
@@ -72,12 +79,16 @@ const emit = defineEmits<{
 		flipH: boolean;
 		offsetX: number;
 		offsetY: number;
+		scale: number;
+		opacity: number;
 	}): void;
 	(ev: 'update', payload: {
 		angle: number;
 		flipH: boolean;
 		offsetX: number;
 		offsetY: number;
+		scale: number;
+		opacity: number;
 	}): void;
 	(ev: 'detach'): void;
 }>();
@@ -89,6 +100,8 @@ const angle = ref((props.usingIndex != null ? $i.avatarDecorations[props.usingIn
 const flipH = ref((props.usingIndex != null ? $i.avatarDecorations[props.usingIndex].flipH : null) ?? false);
 const offsetX = ref((props.usingIndex != null ? $i.avatarDecorations[props.usingIndex].offsetX : null) ?? 0);
 const offsetY = ref((props.usingIndex != null ? $i.avatarDecorations[props.usingIndex].offsetY : null) ?? 0);
+const scale = ref((props.usingIndex != null ? $i.avatarDecorations[props.usingIndex].scale : null) ?? 1);
+const opacity = ref((props.usingIndex != null ? $i.avatarDecorations[props.usingIndex].opacity : null) ?? 1);
 
 const decorationsForPreview = computed(() => {
 	const decoration = {
@@ -98,6 +111,8 @@ const decorationsForPreview = computed(() => {
 		flipH: flipH.value,
 		offsetX: offsetX.value,
 		offsetY: offsetY.value,
+		scale: scale.value,
+		opacity: opacity.value,
 		blink: true,
 	};
 	const decorations = [...$i.avatarDecorations];
@@ -119,6 +134,8 @@ async function update() {
 		flipH: flipH.value,
 		offsetX: offsetX.value,
 		offsetY: offsetY.value,
+		scale: scale.value,
+		opacity: opacity.value,
 	});
 	dialog.value?.close();
 }
@@ -129,6 +146,8 @@ async function attach() {
 		flipH: flipH.value,
 		offsetX: offsetX.value,
 		offsetY: offsetY.value,
+		scale: scale.value,
+		opacity: opacity.value,
 	});
 	dialog.value?.close();
 }
