@@ -28,6 +28,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<MkA :class="$style.invitationBody" :to="`${userPage(invitation.user)}`">
 				<MkUserCardMini :user="invitation.user"/>
 			</MkA>
+			<button class="_button" :class="$style.cancelButton" :aria-label="i18n.ts._chat.cancelInvitation" @click="cancelInvitation(invitation)">
+				<i class="ti ti-x"></i>
+			</button>
 		</div>
 	</template>
 </div>
@@ -42,6 +45,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import MkUserCardMini from '@/components/MkUserCardMini.vue';
 import { userPage } from '@@/js/user.js';
 import { ensureSignin } from '@/i.js';
+import * as os from '@/os.js';
 
 const $i = ensureSignin();
 
@@ -59,6 +63,21 @@ const isOwner = computed(() => {
 
 const memberships = ref<Misskey.entities.ChatRoomMembership[]>([]);
 const invitations = ref<Misskey.entities.ChatRoomInvitation[]>([]);
+
+// arti: take back a sent invitation (from CherryPick)
+async function cancelInvitation(invitation: Misskey.entities.ChatRoomInvitation) {
+	const { canceled } = await os.confirm({
+		type: 'warning',
+		text: i18n.tsx._chat.cancelInvitationConfirm({ name: invitation.user.name ?? invitation.user.username }),
+	});
+	if (canceled) return;
+
+	await os.apiWithDialog('chat/rooms/invitations/cancel', {
+		invitationId: invitation.id,
+	});
+
+	invitations.value = invitations.value.filter(i => i.id !== invitation.id);
+}
 
 onMounted(async () => {
 	memberships.value = await misskeyApi('chat/rooms/members', {
@@ -94,5 +113,18 @@ onMounted(async () => {
 	flex: 1;
 	min-width: 0;
 	margin-right: 8px;
+}
+
+.cancelButton {
+	flex-shrink: 0;
+	width: 32px;
+	height: 32px;
+	margin: auto 8px;
+	border-radius: 100%;
+	color: var(--MI_THEME-error);
+
+	&:hover {
+		background: var(--MI_THEME-buttonHoverBg);
+	}
 }
 </style>

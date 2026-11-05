@@ -5,7 +5,8 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { Brackets } from 'typeorm';
+import * as mfm from 'mfm-js';
+import { Brackets, In } from 'typeorm';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import { QueueService } from '@/core/QueueService.js';
@@ -14,6 +15,8 @@ import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { ChatEntityService } from '@/core/entities/ChatEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
+import { getApId } from '@/core/activitypub/type.js';
+import type { IInvite } from '@/core/activitypub/type.js';
 import { PushNotificationService } from '@/core/PushNotificationService.js';
 import { bindThis } from '@/decorators.js';
 import type { ChatApprovalsRepository, ChatMessagesRepository, ChatRoomInvitationsRepository, ChatRoomMembershipsRepository, ChatRoomsRepository, MiChatMessage, MiChatRoom, MiChatRoomMembership, MiDriveFile, MiUser, MutingsRepository, UsersRepository } from '@/models/_.js';
@@ -26,6 +29,7 @@ import { Packed } from '@/misc/json-schema.js';
 import { sqlLikeEscape } from '@/misc/sql-like-escape.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { emojiRegex } from '@/misc/emoji-regex.js';
+import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 
@@ -135,6 +139,7 @@ export class ChatService {
 		text?: string | null;
 		file?: MiDriveFile | null;
 		uri?: string | null;
+		emojis?: string[];
 	}): Promise<Packed<'ChatMessageLiteFor1on1'>> {
 		if (fromUser.id === toUser.id) {
 			throw new Error('yourself');
@@ -193,6 +198,7 @@ export class ChatService {
 			fileId: params.file ? params.file.id : null,
 			reads: [],
 			uri: params.uri ?? null,
+			emojis: params.emojis ?? this.extractEmojis(params.text),
 		} satisfies Partial<MiChatMessage>;
 
 		const inserted = await this.chatMessagesRepository.insertOne(message);
@@ -238,6 +244,11 @@ export class ChatService {
 			}, 3000);
 		}
 
+		// arti: deliver to a remote recipient (chat federation, from CherryPick)
+		if (this.userEntityService.isLocalUser(fromUser) && this.userEntityService.isRemoteUser(toUser)) {
+			this.deliverChatMessage(inserted, [toUser]);
+		}
+
 		return packedMessage;
 	}
 
@@ -246,6 +257,7 @@ export class ChatService {
 		text?: string | null;
 		file?: MiDriveFile | null;
 		uri?: string | null;
+		emojis?: string[];
 	}): Promise<Packed<'ChatMessageLiteForRoom'>> {
 		const memberships = (await this.chatRoomMembershipsRepository.findBy({ roomId: toRoom.id })).map(m => ({
 			userId: m.userId,
@@ -269,6 +281,7 @@ export class ChatService {
 			fileId: params.file ? params.file.id : null,
 			reads: [],
 			uri: params.uri ?? null,
+			emojis: params.emojis ?? this.extractEmojis(params.text),
 		} satisfies Partial<MiChatMessage>;
 
 		const inserted = await this.chatMessagesRepository.insertOne(message);
@@ -308,7 +321,48 @@ export class ChatService {
 			}
 		}, 3000);
 
+		// arti: deliver to remote members of the room (chat federation, from CherryPick)
+		if (this.userEntityService.isLocalUser(fromUser)) {
+			const members = await this.usersRepository.findBy({ id: In(memberships.map(m => m.userId)) });
+			if (members.some(m => this.userEntityService.isRemoteUser(m))) {
+				this.deliverChatMessage(inserted, members, toRoom.id);
+			}
+		}
+
 		return packedMessage;
+	}
+
+	@bindThis
+	private extractEmojis(text: string | null | undefined): string[] {
+		if (text == null || text === '') return [];
+		return extractCustomEmojisFromMfm(mfm.parse(text));
+	}
+
+	/**
+	 * arti: send a local user's chat message to the remote users among `recipients`
+	 */
+	@bindThis
+	private async deliverChatMessage(message: MiChatMessage, recipients: MiUser[], roomId?: MiChatRoom['id']) {
+		const fromUser = await this.usersRepository.findOneByOrFail({ id: message.fromUserId });
+		if (!this.userEntityService.isLocalUser(fromUser)) return;
+
+		const object = await this.apRendererService.renderChatMessage(message, fromUser, recipients, roomId);
+		const activity = this.apRendererService.addContext({
+			id: `${this.config.url}/chat/messages/${message.id}/activity`,
+			type: 'Create',
+			actor: this.userEntityService.genLocalUserUri(fromUser.id),
+			object,
+			published: this.idService.parse(message.id).date.toISOString(),
+		});
+
+		const inboxes = new Set<string>();
+		for (const user of recipients) {
+			const inbox = this.userEntityService.isRemoteUser(user) ? user.sharedInbox ?? user.inbox : null;
+			if (inbox != null) inboxes.add(inbox);
+		}
+		for (const inbox of inboxes) {
+			this.queueService.deliver(fromUser, activity, inbox, false);
+		}
 	}
 
 	@bindThis
@@ -700,9 +754,26 @@ export class ChatService {
 
 		const created = await this.chatRoomInvitationsRepository.insertOne(invitation);
 
-		this.notificationService.createNotification(inviteeId, 'chatRoomInvitationReceived', {
-			invitationId: invitation.id,
-		}, inviterId);
+		const [inviter, invitee] = await Promise.all([
+			this.usersRepository.findOneByOrFail({ id: inviterId }),
+			this.usersRepository.findOneByOrFail({ id: inviteeId }),
+		]);
+
+		if (this.userEntityService.isLocalUser(invitee)) {
+			this.notificationService.createNotification(inviteeId, 'chatRoomInvitationReceived', {
+				invitationId: invitation.id,
+			}, inviterId);
+		}
+
+		// arti: send an Invite to a remote invitee (chat federation, from CherryPick)
+		if (this.userEntityService.isLocalUser(inviter) && this.userEntityService.isRemoteUser(invitee)) {
+			const activity = this.apRendererService.addContext({
+				id: `${this.config.url}/chat/invitations/${invitation.id}`,
+				...this.apRendererService.renderInvite(this.apRendererService.renderChatRoom(room, inviter), invitee.uri, inviter),
+				published: this.idService.parse(invitation.id).date.toISOString(),
+			});
+			this.queueService.deliver(inviter, activity, invitee.inbox, false);
+		}
 
 		return created;
 	}
@@ -756,12 +827,84 @@ export class ChatService {
 		// TODO: transaction
 		await this.chatRoomMembershipsRepository.insertOne(membership);
 		await this.chatRoomInvitationsRepository.delete(invitation.id);
+
+		// arti: tell a remote room owner that we accepted (chat federation, from CherryPick)
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+		const [user, owner] = await Promise.all([
+			this.usersRepository.findOneByOrFail({ id: userId }),
+			this.usersRepository.findOneByOrFail({ id: room.ownerId }),
+		]);
+		if (this.userEntityService.isLocalUser(user) && this.userEntityService.isRemoteUser(owner)) {
+			const invite: IInvite = {
+				type: 'Invite',
+				actor: owner.uri,
+				object: this.apRendererService.renderChatRoom(room, owner),
+				target: this.userEntityService.genLocalUserUri(user.id),
+			};
+			const activity = this.apRendererService.addContext(this.apRendererService.renderAccept(invite, user));
+			this.queueService.deliver(user, activity, owner.inbox, false);
+		}
 	}
 
 	@bindThis
 	public async ignoreRoomInvitation(userId: MiUser['id'], roomId: MiChatRoom['id']) {
 		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ roomId, userId });
 		await this.chatRoomInvitationsRepository.update(invitation.id, { ignored: true });
+	}
+
+	/**
+	 * arti: decline an invitation; a remote room owner gets a Reject (from CherryPick)
+	 */
+	@bindThis
+	public async rejectRoomInvitation(userId: MiUser['id'], roomId: MiChatRoom['id']) {
+		const invitation = await this.chatRoomInvitationsRepository.findOneByOrFail({ roomId, userId });
+		const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+
+		await this.chatRoomInvitationsRepository.delete(invitation.id);
+
+		const [user, owner] = await Promise.all([
+			this.usersRepository.findOneByOrFail({ id: userId }),
+			this.usersRepository.findOneByOrFail({ id: room.ownerId }),
+		]);
+		if (this.userEntityService.isLocalUser(user) && this.userEntityService.isRemoteUser(owner)) {
+			const invite: IInvite = {
+				type: 'Invite',
+				actor: owner.uri,
+				object: this.apRendererService.renderChatRoom(room, owner),
+				target: this.userEntityService.genLocalUserUri(user.id),
+			};
+			const activity = this.apRendererService.addContext(this.apRendererService.renderReject(invite, user));
+			this.queueService.deliver(user, activity, owner.inbox, false);
+		}
+	}
+
+	/**
+	 * arti: the room owner takes back an invitation; a remote invitee gets an Undo(Invite) (from CherryPick)
+	 */
+	@bindThis
+	public async cancelRoomInvitation(ownerId: MiUser['id'], invitationId: MiChatRoomInvitation['id']): Promise<boolean> {
+		const invitation = await this.chatRoomInvitationsRepository.findOneBy({ id: invitationId });
+		if (invitation == null) return false;
+
+		const room = await this.chatRoomsRepository.findOneBy({ id: invitation.roomId, ownerId });
+		if (room == null) return false;
+
+		await this.chatRoomInvitationsRepository.delete(invitation.id);
+
+		const [owner, invitee] = await Promise.all([
+			this.usersRepository.findOneByOrFail({ id: ownerId }),
+			this.usersRepository.findOneByOrFail({ id: invitation.userId }),
+		]);
+		if (this.userEntityService.isLocalUser(owner) && this.userEntityService.isRemoteUser(invitee)) {
+			const invite = {
+				id: `${this.config.url}/chat/invitations/${invitation.id}`,
+				...this.apRendererService.renderInvite(this.apRendererService.renderChatRoom(room, owner), invitee.uri, owner),
+			};
+			const activity = this.apRendererService.addContext(this.apRendererService.renderUndo(invite, owner));
+			this.queueService.deliver(owner, activity, invitee.inbox, false);
+		}
+
+		return true;
 	}
 
 	@bindThis
@@ -774,6 +917,24 @@ export class ChatService {
 		redisPipeline.del(`newRoomChatMessageExists:${userId}:${roomId}`);
 		redisPipeline.srem(`newChatMessagesExists:${userId}`, `room:${roomId}`);
 		await redisPipeline.exec();
+
+		// arti: tell remote members (and a remote owner) that a local user left (chat federation, from CherryPick)
+		const user = await this.usersRepository.findOneByOrFail({ id: userId });
+		if (this.userEntityService.isLocalUser(user)) {
+			const room = await this.chatRoomsRepository.findOneByOrFail({ id: roomId });
+			const owner = await this.usersRepository.findOneByOrFail({ id: room.ownerId });
+			const memberIds = (await this.chatRoomMembershipsRepository.findBy({ roomId })).map(m => m.userId).concat(room.ownerId);
+			const remoteMembers = (await this.usersRepository.findBy({ id: In(memberIds) })).filter(u => this.userEntityService.isRemoteUser(u));
+
+			if (remoteMembers.length > 0) {
+				const roomUri = getApId(this.apRendererService.renderChatRoom(room, owner));
+				const activity = this.apRendererService.addContext(this.apRendererService.renderRemove(user, roomUri, this.userEntityService.genLocalUserUri(user.id)));
+				const inboxes = new Set(remoteMembers.map(u => u.sharedInbox ?? u.inbox).filter(x => x != null));
+				for (const inbox of inboxes) {
+					this.queueService.deliver(user, activity, inbox, false);
+				}
+			}
+		}
 	}
 
 	@bindThis

@@ -78,6 +78,15 @@ export const packedChatMessageSchema = {
 				},
 			},
 		},
+		emojis: {
+			type: 'object',
+			optional: true, nullable: false,
+			additionalProperties: {
+				anyOf: [{
+					type: 'string',
+				}],
+			},
+		},
 	},
 } as const;
 
@@ -142,6 +151,15 @@ export const packedChatMessageLiteSchema = {
 				},
 			},
 		},
+		emojis: {
+			type: 'object',
+			optional: true, nullable: false,
+			additionalProperties: {
+				anyOf: [{
+					type: 'string',
+				}],
+			},
+		},
 	},
 } as const;
 
@@ -190,6 +208,15 @@ export const packedChatMessageLiteFor1on1Schema = {
 						optional: false, nullable: false,
 					},
 				},
+			},
+		},
+		emojis: {
+			type: 'object',
+			optional: true, nullable: false,
+			additionalProperties: {
+				anyOf: [{
+					type: 'string',
+				}],
 			},
 		},
 	},
@@ -250,6 +277,15 @@ export const packedChatMessageLiteForRoomSchema = {
 						ref: 'UserLite',
 					},
 				},
+			},
+		},
+		emojis: {
+			type: 'object',
+			optional: true, nullable: false,
+			additionalProperties: {
+				anyOf: [{
+					type: 'string',
+				}],
 			},
 		},
 	},

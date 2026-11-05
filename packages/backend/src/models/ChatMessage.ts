@@ -82,4 +82,10 @@ export class MiChatMessage {
 		length: 1024, array: true, default: '{}',
 	})
 	public reactions: string[];
+
+	// arti: custom emoji names in the text (from CherryPick)
+	@Column('varchar', {
+		length: 128, array: true, default: '{}',
+	})
+	public emojis: string[];
 }

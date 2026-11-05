@@ -133,6 +133,8 @@ export interface IPost extends IObject {
 	};
 	_misskey_quote?: string;
 	_misskey_content?: string;
+	// arti: chat message federation (legacy Misskey talk format, from CherryPick)
+	_misskey_talk?: boolean;
 	quoteUrl?: string;
 }
 
@@ -316,6 +318,11 @@ export interface IRemove extends IActivity {
 	type: 'Remove';
 }
 
+// arti: chat room invitation (from CherryPick)
+export interface IInvite extends IActivity {
+	type: 'Invite';
+}
+
 export interface ILike extends IActivity {
 	type: 'Like' | 'EmojiReaction' | 'EmojiReact';
 	_misskey_reaction?: string;
@@ -348,6 +355,7 @@ export const isAccept = (object: IObject): object is IAccept => getApType(object
 export const isReject = (object: IObject): object is IReject => getApType(object) === 'Reject';
 export const isAdd = (object: IObject): object is IAdd => getApType(object) === 'Add';
 export const isRemove = (object: IObject): object is IRemove => getApType(object) === 'Remove';
+export const isInvite = (object: IObject): object is IInvite => getApType(object) === 'Invite';
 export const isLike = (object: IObject): object is ILike => {
 	const type = getApType(object);
 	return type != null && ['Like', 'EmojiReaction', 'EmojiReact'].includes(type);
