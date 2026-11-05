@@ -6145,6 +6145,18 @@ export interface Locale extends ILocale {
          */
         "ignore": string;
         /**
+         * 拒否
+         */
+        "reject": string;
+        /**
+         * 招待を取り消す
+         */
+        "cancelInvitation": string;
+        /**
+         * {name}さんへの招待を取り消しますか？
+         */
+        "cancelInvitationConfirm": ParameterizedString<"name">;
+        /**
          * グループから退出
          */
         "leave": string;

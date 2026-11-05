@@ -1847,6 +1847,17 @@ declare module '../api.js' {
      * 
      * **Credential required**: *Yes* / **Permission**: *write:chat*
      */
+    request<E extends 'chat/rooms/invitations/cancel', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:chat*
+     */
     request<E extends 'chat/rooms/invitations/create', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
@@ -1881,6 +1892,17 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *read:chat*
      */
     request<E extends 'chat/rooms/invitations/outbox', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:chat*
+     */
+    request<E extends 'chat/rooms/invitations/reject', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

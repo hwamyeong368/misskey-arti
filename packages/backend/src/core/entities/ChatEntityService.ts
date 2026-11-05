@@ -5,12 +5,13 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import { DI } from '@/di-symbols.js';
-import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository } from '@/models/_.js';
+import type { MiUser, ChatMessagesRepository, MiChatMessage, ChatRoomsRepository, MiChatRoom, MiChatRoomInvitation, ChatRoomInvitationsRepository, MiChatRoomMembership, ChatRoomMembershipsRepository, UsersRepository } from '@/models/_.js';
 import { awaitAll } from '@/misc/prelude/await-all.js';
 import type { Packed } from '@/misc/json-schema.js';
 import type { } from '@/models/Blocking.js';
 import { bindThis } from '@/decorators.js';
 import { IdService } from '@/core/IdService.js';
+import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { UserEntityService } from './UserEntityService.js';
 import { DriveFileEntityService } from './DriveFileEntityService.js';
 import { In } from 'typeorm';
@@ -30,8 +31,12 @@ export class ChatEntityService {
 		@Inject(DI.chatRoomMembershipsRepository)
 		private chatRoomMembershipsRepository: ChatRoomMembershipsRepository,
 
+		@Inject(DI.usersRepository)
+		private usersRepository: UsersRepository,
+
 		private userEntityService: UserEntityService,
 		private driveFileEntityService: DriveFileEntityService,
+		private customEmojiService: CustomEmojiService,
 		private idService: IdService,
 	) {
 	}
@@ -78,7 +83,25 @@ export class ChatEntityService {
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
+			emojis: await this.packEmojis(message, packedUsers?.get(message.fromUserId)?.host),
 		};
+	}
+
+	/**
+	 * arti: image URLs of a remote sender's custom emojis (like notes do)
+	 */
+	@bindThis
+	private async packEmojis(message: MiChatMessage, fromUserHost?: string | null): Promise<Record<string, string> | undefined> {
+		if (message.emojis == null || message.emojis.length === 0) return undefined;
+
+		const host = fromUserHost !== undefined
+			? fromUserHost
+			: message.fromUser !== undefined && message.fromUser !== null
+				? message.fromUser.host
+				: (await this.usersRepository.findOne({ where: { id: message.fromUserId }, select: { id: true, host: true } }))?.host ?? null;
+		if (host == null) return undefined;
+
+		return this.customEmojiService.populateEmojis(message.emojis, host);
 	}
 
 	@bindThis
@@ -153,6 +176,7 @@ export class ChatEntityService {
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
 			reactions,
+			emojis: await this.packEmojis(message),
 		};
 	}
 
@@ -206,6 +230,7 @@ export class ChatEntityService {
 			fileId: message.fileId,
 			file: message.fileId ? (packedFiles?.get(message.fileId) ?? (await this.driveFileEntityService.pack(message.file ?? message.fileId))) : null,
 			reactions: reactions.filter((r): r is { user: Packed<'UserLite'>; reaction: string; } => r.user != null),
+			emojis: await this.packEmojis(message, packedUsers?.get(message.fromUserId)?.host),
 		};
 	}
 

@@ -23,6 +23,8 @@ import { MfmService } from '@/core/MfmService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
+import type { MiChatMessage } from '@/models/ChatMessage.js';
+import type { MiChatRoom } from '@/models/ChatRoom.js';
 import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
@@ -32,7 +34,7 @@ import { escapeHtml } from '@/misc/escape-html.js';
 import { JsonLdService } from './JsonLdService.js';
 import { ApMfmService } from './ApMfmService.js';
 import { CONTEXT } from './misc/contexts.js';
-import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IBlock, ICreate, IDelete, IFlag, IFollow, IKey, ILike, IMove, IObject, IPost, IQuestion, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
+import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IBlock, ICreate, IDelete, IFlag, IFollow, IInvite, IKey, ILike, IMove, IObject, IPost, IQuestion, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
 
 @Injectable()
 export class ApRendererService {
@@ -76,6 +78,17 @@ export class ApRendererService {
 			type: 'Accept',
 			actor: this.userEntityService.genLocalUserUri(user.id),
 			object,
+		};
+	}
+
+	// arti: chat room invitation (from CherryPick)
+	@bindThis
+	public renderInvite(object: string | IObject, target: string, user: { id: MiUser['id']; host: null }): IInvite {
+		return {
+			type: 'Invite',
+			actor: this.userEntityService.genLocalUserUri(user.id),
+			object,
+			target,
 		};
 	}
 
@@ -767,5 +780,70 @@ export class ApRendererService {
 		const emojis = names.map(name => allEmojis.get(name)).filter(x => x != null);
 
 		return emojis;
+	}
+
+	/**
+	 * arti: Renders a chat message as a Note with the legacy `_misskey_talk` flag (format from CherryPick)
+	 */
+	@bindThis
+	public async renderChatMessage(message: MiChatMessage, fromUser: MiUser, toUsers: MiUser[], roomId?: string): Promise<IPost> {
+		const to = toUsers
+			.filter(user => user.id !== fromUser.id)
+			.map(user => this.userEntityService.isRemoteUser(user) ? user.uri : this.userEntityService.genLocalUserUri(user.id));
+
+		const file = message.fileId ? await this.driveFilesRepository.findOneBy({ id: message.fileId }) : null;
+
+		const emojis = await this.getEmojis(message.emojis);
+		const apemojis = emojis.filter(emoji => !emoji.localOnly).map(emoji => this.renderEmoji(emoji));
+
+		const text = message.text ?? '';
+
+		const note: IPost = {
+			id: `${this.config.url}/chat/messages/${message.id}`,
+			type: 'Note',
+			attributedTo: this.userEntityService.genLocalUserUri(fromUser.id),
+			content: this.mfmService.toHtml(mfm.parse(text)) ?? '',
+			_misskey_content: text,
+			source: {
+				content: text,
+				mediaType: 'text/x.misskeymarkdown',
+			},
+			to,
+			published: this.idService.parse(message.id).date.toISOString(),
+			_misskey_talk: true,
+		};
+
+		// group chat: CherryPick puts the room URI here so the receiver can find the room
+		if (roomId) {
+			note['@context'] = `${this.config.url}/chat/rooms/${roomId}`;
+		}
+
+		if (file) {
+			note.attachment = [this.renderDocument(file)];
+		}
+
+		if (apemojis.length > 0) {
+			note.tag = apemojis;
+		}
+
+		return note;
+	}
+
+	/**
+	 * arti: Renders a chat room as a Group object (format from CherryPick)
+	 */
+	@bindThis
+	public renderChatRoom(room: MiChatRoom, owner: MiUser): IObject {
+		const isLocal = owner.uri == null;
+		const ownerUri = isLocal ? this.userEntityService.genLocalUserUri(owner.id) : owner.uri!;
+		const origin = isLocal ? this.config.url : new URL(owner.uri!).origin;
+
+		return {
+			type: 'Group',
+			id: `${origin}/chat/rooms/${room.id}`,
+			name: room.name,
+			summary: room.description || undefined,
+			attributedTo: ownerUri,
+		};
 	}
 }
