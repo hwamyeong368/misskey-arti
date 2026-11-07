@@ -3561,6 +3561,7 @@ _voiceCall:
   micUnavailable: "마이크를 쓸 수 없어요."
   connectionFailed: "통화 서버에 연결하지 못했어요."
   remoteHostNotice: "이 통화는 {host}에서 열려요. {host}에서 내 IP 주소를 볼 수 있어요."
+  recordingSaved: "녹음 파일을 드라이브에 저장했어요"
   startRecording: "녹음 시작"
   stopRecording: "녹음 중지"
   recording: "녹음 중"

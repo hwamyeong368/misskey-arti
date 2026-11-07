@@ -3676,6 +3676,7 @@ _voiceCall:
   micUnavailable: "マイクを使用できません。"
   connectionFailed: "通話サーバーに接続できませんでした。"
   remoteHostNotice: "この通話は{host}で開かれます。{host}にはあなたのIPアドレスが見えます。"
+  recordingSaved: "録音ファイルをドライブに保存しました"
   startRecording: "録音を開始"
   stopRecording: "録音を停止"
   recording: "録音中"

@@ -13741,6 +13741,10 @@ export interface Locale extends ILocale {
          */
         "remoteHostNotice": ParameterizedString<"host" | "host">;
         /**
+         * 録音ファイルをドライブに保存しました
+         */
+        "recordingSaved": string;
+        /**
          * 録音を開始
          */
         "startRecording": string;

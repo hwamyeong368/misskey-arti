@@ -78,12 +78,13 @@ type RecordingPart = {
 	chunks: Blob[];
 	bytes: number;
 	uploads: Promise<void>[];
-	suffix: string;
+	name: string;
 };
 const recordingParts = new Map<RecordingPartKind, RecordingPart>();
 let recordingContext: AudioContext | null = null;
 let recordingMicBus: GainNode | null = null;
 let recordingOthersBus: GainNode | null = null;
+let recordingMixedDest: MediaStreamAudioDestinationNode | null = null;
 const recordingSources = new Map<MediaStreamTrack, { source: MediaStreamAudioSourceNode; kind: 'mic' | 'others' }>();
 let recordingCanvas: HTMLCanvasElement | null = null;
 let recordingCanvasStream: MediaStream | null = null;
@@ -108,6 +109,27 @@ function addRecordingVideo(track: MediaStreamTrack, screen: boolean): void {
 	element.srcObject = new MediaStream([track]);
 	void element.play().catch(() => {});
 	recordingVideos.set(track, { element, screen });
+	ensureRecordingVideoPart();
+}
+
+/** arti: start the video part when the first video track appears, even after recording began */
+function ensureRecordingVideoPart(): void {
+	if (recordingParts.has('video') || recordingMixedDest == null || recordingContext == null) return;
+	if (recordingCanvas == null) {
+		const canvas = window.document.createElement('canvas');
+		canvas.width = 1920;
+		canvas.height = 1080;
+		recordingCanvas = canvas;
+		recordingCanvasStream = canvas.captureStream(30);
+		recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
+		drawRecordingFrame();
+	}
+	console.info(`[recording] video sources=${recordingVideos.size}`);
+	const base = recordingParts.get('mic')?.name ?? `voice-${recordingStamp(new Date())}`;
+	createRecordingPart('video', new MediaStream([
+		...recordingMixedDest.stream.getAudioTracks(),
+		...recordingCanvasStream!.getVideoTracks(),
+	]), recordingVideoMimeType(), 8_000_000, `${base.replace(/-mic$/, '')}-video-${recordingStamp(new Date())}`);
 }
 
 function removeRecordingVideo(track: MediaStreamTrack): void {
@@ -170,17 +192,16 @@ function removeRecordingTrack(track: MediaStreamTrack): void {
 	recordingSources.delete(track);
 }
 
-function recordingFileName(suffix: string): string {
-	const now = new Date();
+function recordingStamp(date: Date): string {
 	const pad = (n: number) => String(n).padStart(2, '0');
-	return `voice-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}${suffix}.webm`;
+	return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-async function uploadRecording(blob: Blob, suffix: string): Promise<void> {
+async function uploadRecording(blob: Blob, name: string): Promise<void> {
 	const roomId = state.room?.id;
 	if (roomId == null || blob.size === 0) return;
 	const form = new FormData();
-	form.append('file', blob, recordingFileName(suffix));
+	form.append('file', blob, `${name}.webm`);
 	// Misskey authenticates API calls with the token in the form, not with cookies
 	if ($i != null) form.append('i', $i.token);
 	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'omit' });
@@ -190,7 +211,8 @@ async function uploadRecording(blob: Blob, suffix: string): Promise<void> {
 		const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
 		if (converted != null) file = converted;
 	} catch { /* keep the WebM when ffmpeg fails */ }
-	await misskeyApi('chat/messages/create-to-room', { toRoomId: roomId, fileId: file.id });
+	// the recording stays in the drive; it is not posted to the room
+	os.toast(i18n.ts._voiceCall.recordingSaved);
 }
 
 function flushRecordingChunk(kind: RecordingPartKind, force: boolean): void {
@@ -200,12 +222,12 @@ function flushRecordingChunk(kind: RecordingPartKind, force: boolean): void {
 	const blob = new Blob(part.chunks, { type: part.recorder.mimeType || 'audio/webm' });
 	part.chunks = [];
 	part.bytes = 0;
-	part.uploads.push(uploadRecording(blob, part.suffix).catch(err => {
+	part.uploads.push(uploadRecording(blob, part.name).catch(err => {
 		console.error(err);
 	}));
 }
 
-function createRecordingPart(kind: RecordingPartKind, stream: MediaStream, mime: string | undefined, bits: number, suffix: string): void {
+function createRecordingPart(kind: RecordingPartKind, stream: MediaStream, mime: string | undefined, bits: number, name: string): void {
 	const options: MediaRecorderOptions = { ...(mime != null ? { mimeType: mime } : {}) };
 	if (kind === 'video') {
 		options.videoBitsPerSecond = bits;
@@ -214,7 +236,7 @@ function createRecordingPart(kind: RecordingPartKind, stream: MediaStream, mime:
 		options.audioBitsPerSecond = bits;
 	}
 	const rec = new MediaRecorder(stream, options);
-	const part: RecordingPart = { recorder: rec, chunks: [], bytes: 0, uploads: [], suffix };
+	const part: RecordingPart = { recorder: rec, chunks: [], bytes: 0, uploads: [], name };
 	recordingParts.set(kind, part);
 	rec.ondataavailable = (ev) => {
 		if (ev.data.size === 0) return;
@@ -247,6 +269,7 @@ function teardownRecording(): void {
 	stopRecordingVideo();
 	recordingMicBus = null;
 	recordingOthersBus = null;
+	recordingMixedDest = null;
 	recordingContext?.close().catch(() => {});
 	recordingContext = null;
 	recordingSources.clear();
@@ -423,12 +446,14 @@ export async function startRecording(): Promise<void> {
 	micBus.connect(mixedDest);
 	othersBus.connect(othersDest);
 	othersBus.connect(mixedDest);
+	recordingMixedDest = mixedDest;
 	recordingMicBus = micBus;
 	recordingOthersBus = othersBus;
 	recordingSources.clear();
 
-	createRecordingPart('mic', micDest.stream, recordingMimeType(), 192_000, '-mic');
-	createRecordingPart('others', othersDest.stream, recordingMimeType(), 256_000, '-call');
+	const base = recordingStamp(new Date());
+	createRecordingPart('mic', micDest.stream, recordingMimeType(), 192_000, `voice-${base}-mic`);
+	createRecordingPart('others', othersDest.stream, recordingMimeType(), 256_000, `voice-${base}-call`);
 
 	const lk = livekit;
 	let hasVideo = false;
@@ -464,20 +489,7 @@ export async function startRecording(): Promise<void> {
 	}
 
 	// only composite video when there is something to show; otherwise this stays an audio recording
-	if (hasVideo) {
-		const canvas = window.document.createElement('canvas');
-		canvas.width = 1920;
-		canvas.height = 1080;
-		recordingCanvas = canvas;
-		recordingCanvasStream = canvas.captureStream(30);
-		recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
-		drawRecordingFrame();
-		console.info(`[recording] video sources=${recordingVideos.size}`);
-		createRecordingPart('video', new MediaStream([
-			...mixedDest.stream.getAudioTracks(),
-			...recordingCanvasStream.getVideoTracks(),
-		]), recordingVideoMimeType(), 8_000_000, '-video');
-	}
+	if (hasVideo) ensureRecordingVideoPart();
 
 	state.recording = true;
 	state.recordingStartedAt = Date.now();
