@@ -146,7 +146,7 @@ function drawRecordingFrame(): void {
 }
 
 function addRecordingTrack(track: MediaStreamTrack): void {
-	if (recorder == null || recordingContext == null || recordingDestination == null) return;
+	if (recordingContext == null || recordingDestination == null) return;
 	if (recordingSources.has(track)) return;
 	const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
 	source.connect(recordingDestination);
@@ -355,6 +355,8 @@ export async function startRecording(): Promise<void> {
 	if (Context == null || typeof MediaRecorder === 'undefined') return;
 
 	const context = new Context();
+	// a suspended context feeds no samples to the recorder
+	await context.resume().catch(() => {});
 	const destination = context.createMediaStreamDestination();
 	recordingContext = context;
 	recordingDestination = destination;
@@ -365,25 +367,13 @@ export async function startRecording(): Promise<void> {
 
 	// arti: composite the shared screen / participant cameras into the recording
 	const canvas = window.document.createElement('canvas');
-	canvas.width = 1280;
-	canvas.height = 720;
+	canvas.width = 1920;
+	canvas.height = 1080;
 	recordingCanvas = canvas;
-	recordingCanvasStream = canvas.captureStream(15);
+	recordingCanvasStream = canvas.captureStream(30);
 	recordingVideos.clear();
 	recordingDrawTimer = window.setInterval(drawRecordingFrame, 66);
 	drawRecordingFrame();
-
-	const mimeType = recordingVideoMimeType();
-	const rec = new MediaRecorder(new MediaStream([
-		...destination.stream.getAudioTracks(),
-		...recordingCanvasStream.getVideoTracks(),
-	]), {
-		...(mimeType != null ? { mimeType } : {}),
-		videoBitsPerSecond: 2_500_000,
-		audioBitsPerSecond: 64_000,
-	});
-	// addRecordingTrack only works once the recorder exists
-	recorder = rec;
 
 	const lk = livekit;
 	if (lk != null) {
@@ -402,8 +392,19 @@ export async function startRecording(): Promise<void> {
 		}
 	}
 
-	// a suspended AudioContext produces no frames, so the recorder would stay empty
-	await context.resume().catch(() => {});
+	// connect the sources before the recorder exists, so its audio track starts live
+	console.info(`[recording] ${recordingSources.size} audio source(s)`);
+
+	const mimeType = recordingVideoMimeType();
+	const rec = new MediaRecorder(new MediaStream([
+		...destination.stream.getAudioTracks(),
+		...recordingCanvasStream.getVideoTracks(),
+	]), {
+		...(mimeType != null ? { mimeType } : {}),
+		videoBitsPerSecond: 8_000_000,
+		audioBitsPerSecond: 128_000,
+	});
+	recorder = rec;
 
 	rec.ondataavailable = (ev) => {
 		if (ev.data.size === 0) return;
