@@ -34,7 +34,16 @@ export class InternalStorageService {
 	@bindThis
 	public saveFromPath(key: string, srcPath: string) {
 		fs.mkdirSync(this.path, { recursive: true });
-		fs.copyFileSync(srcPath, this.resolvePath(key));
+		const dest = this.resolvePath(key);
+		try {
+			fs.copyFileSync(srcPath, dest);
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException).code;
+			// arti: ntfs-3g (fuseblk) rejects copy_file_range for non-root users with EPERM.
+			// Fall back to a chunked copy so uploads work on such a files volume.
+			if (code !== 'EPERM' && code !== 'EXDEV') throw err;
+			copyFileChunked(srcPath, dest);
+		}
 		return `${this.config.url}/files/${key}`;
 	}
 
@@ -48,5 +57,26 @@ export class InternalStorageService {
 	@bindThis
 	public del(key: string) {
 		fs.unlink(this.resolvePath(key), () => {});
+	}
+}
+
+function copyFileChunked(srcPath: string, destPath: string): void {
+	const inFd = fs.openSync(srcPath, 'r');
+	try {
+		const outFd = fs.openSync(destPath, 'w');
+		try {
+			const buffer = Buffer.allocUnsafe(1024 * 1024);
+			let position = 0;
+			for (;;) {
+				const bytes = fs.readSync(inFd, buffer, 0, buffer.length, position);
+				if (bytes === 0) break;
+				fs.writeSync(outFd, buffer, 0, bytes);
+				position += bytes;
+			}
+		} finally {
+			fs.closeSync(outFd);
+		}
+	} finally {
+		fs.closeSync(inFd);
 	}
 }
