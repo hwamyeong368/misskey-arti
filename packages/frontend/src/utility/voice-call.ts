@@ -115,7 +115,26 @@ function addRecordingVideo(track: MediaStreamTrack, screen: boolean): void {
 	element.srcObject = new MediaStream([track]);
 	void element.play().catch(() => {});
 	recordingVideos.set(track, { element, screen });
+	watchRecordingVideo(track, element);
 	ensureRecordingVideoPart();
+}
+
+/** arti: redraw whenever the source produces a frame; background tabs throttle timers */
+function watchRecordingVideo(track: MediaStreamTrack, video: HTMLVideoElement): void {
+	const step = () => {
+		const entry = recordingVideos.get(track);
+		if (entry == null || entry.element !== video) return;
+		drawRecordingFrame();
+		schedule();
+	};
+	const schedule = () => {
+		if (typeof video.requestVideoFrameCallback === 'function') {
+			video.requestVideoFrameCallback(step);
+		} else {
+			window.setTimeout(step, 33);
+		}
+	};
+	schedule();
 }
 
 /** arti: start the video part when the first video track appears, even after recording began */
@@ -127,7 +146,9 @@ function ensureRecordingVideoPart(): void {
 		canvas.height = 1080;
 		recordingCanvas = canvas;
 		recordingCanvasStream = canvas.captureStream(30);
-		recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
+		if (typeof HTMLVideoElement.prototype.requestVideoFrameCallback !== 'function') {
+			recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
+		}
 		drawRecordingFrame();
 	}
 	console.info(`[recording] video sources=${recordingVideos.size}`);
