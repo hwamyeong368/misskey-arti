@@ -7,7 +7,7 @@ import { Injectable } from '@nestjs/common';
 import { bindThis } from '@/decorators.js';
 
 export type IceServer = {
-	urls: string | string[];
+	urls: string[];
 	username?: string;
 	credential?: string;
 };
@@ -35,7 +35,7 @@ export function parseIceServers(value: unknown): IceServer[] | null {
 		const { urls, username, credential } = item as Record<string, unknown>;
 		if (typeof urls !== 'string' && !(Array.isArray(urls) && urls.every(u => typeof u === 'string'))) return null;
 		result.push({
-			urls: urls as string | string[],
+			urls: typeof urls === 'string' ? [urls] : urls,
 			username: typeof username === 'string' ? username : undefined,
 			credential: typeof credential === 'string' ? credential : undefined,
 		});

@@ -81,6 +81,16 @@ export const meta = {
 			code: 'VOICE_CALL_UNAVAILABLE',
 			id: '6467d072-503a-4ed0-b3ed-36c10637d298',
 		},
+		remoteHostUnsupported: {
+			message: 'The server that owns this room does not support voice calls.',
+			code: 'REMOTE_HOST_UNSUPPORTED',
+			id: '4e71ab43-098d-4c57-84af-39ad6a1a8e37',
+		},
+		remoteHostUnreachable: {
+			message: 'Could not reach the server that owns this room.',
+			code: 'REMOTE_HOST_UNREACHABLE',
+			id: '65a8e792-2bd4-4808-8133-39f1cdcb60b9',
+		},
 	},
 } as const;
 
@@ -135,7 +145,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				try {
 					return await this.remoteVoiceCallService.requestJoin(me, room, room.owner as MiRemoteUser, policies.canScreenShare);
 				} catch (err) {
-					if (err instanceof RemoteVoiceCallError) throw new ApiError(meta.errors.voiceCallUnavailable);
+					if (err instanceof RemoteVoiceCallError) {
+						switch (err.reason) {
+							case 'unsupported': throw new ApiError(meta.errors.remoteHostUnsupported);
+							case 'forbidden': throw new ApiError(meta.errors.voiceCallUnavailable);
+							case 'unreachable': throw new ApiError(meta.errors.remoteHostUnreachable);
+						}
+					}
 					throw err;
 				}
 			}
