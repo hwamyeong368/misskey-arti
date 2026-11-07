@@ -225,6 +225,7 @@ export const paramDef = {
 		signToActivityPubGet: { type: 'boolean' },
 		allowExternalApRedirect: { type: 'boolean' },
 		enableRemoteNotesCleaning: { type: 'boolean' },
+		enableRemoteVoiceCall: { type: 'boolean' },
 		remoteNotesCleaningExpiryDaysForEachNotes: { type: 'number' },
 		remoteNotesCleaningMaxProcessingDurationInMinutes: { type: 'number' },
 		showRoleBadgesOfRemoteUsers: { type: 'boolean' },
@@ -778,6 +779,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.enableRemoteNotesCleaning !== undefined) {
 				set.enableRemoteNotesCleaning = ps.enableRemoteNotesCleaning;
+			}
+
+			if (ps.enableRemoteVoiceCall !== undefined) {
+				set.enableRemoteVoiceCall = ps.enableRemoteVoiceCall;
 			}
 
 			if (ps.remoteNotesCleaningExpiryDaysForEachNotes !== undefined) {
