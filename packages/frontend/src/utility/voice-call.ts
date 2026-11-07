@@ -5,7 +5,7 @@
 
 import { reactive, readonly } from 'vue';
 import * as Misskey from 'misskey-js';
-import { url } from '@@/js/config.js';
+import { apiUrl, url } from '@@/js/config.js';
 import type { AudioCaptureOptions, DisconnectReason, LocalAudioTrack, LocalParticipant, LocalTrack, LocalTrackPublication, Participant, RemoteParticipant, RemoteTrack, RemoteTrackPublication, Room, RoomConnectOptions, TrackPublication, VideoPreset } from 'livekit-client';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { isApiError } from '@/utility/api-error.js';
@@ -37,6 +37,9 @@ const state = reactive({
 	screenShareIdentities: [] as string[],
 	// 見ている共有画面 (見始めた順)。いくつでも同時に見られる
 	watchingIdentities: [] as string[],
+	// arti: 通話の録音 (声だけ)。録音中は参加者に知らせる
+	recording: false,
+	recordingStartedAt: null as number | null,
 });
 
 /** 現在の通話の状態。書き換えは下の関数経由で行う */
@@ -66,6 +69,64 @@ let statusDelivery: StatusDelivery | null = null;
 // スピーカーを切り替えた回数。マイクを入れるのを待つあいだに切り替えられたかを見分ける
 let deafenRevision = 0;
 
+// arti: record the call (voices only) and upload the file to the drive
+const RECORDING_CHUNK_BYTES = 100 * 1024 * 1024;
+let recorder: MediaRecorder | null = null;
+let recordingContext: AudioContext | null = null;
+let recordingDestination: MediaStreamAudioDestinationNode | null = null;
+const recordingSources = new Map<MediaStreamTrack, MediaStreamAudioSourceNode>();
+let recordingChunks: Blob[] = [];
+let recordingBytes = 0;
+let recordingUploads: Promise<void>[] = [];
+
+function recordingMimeType(): string | undefined {
+	if (typeof MediaRecorder === 'undefined') return undefined;
+	return ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type));
+}
+
+function addRecordingTrack(track: MediaStreamTrack): void {
+	if (recorder == null || recordingContext == null || recordingDestination == null) return;
+	if (recordingSources.has(track)) return;
+	const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
+	source.connect(recordingDestination);
+	recordingSources.set(track, source);
+}
+
+function removeRecordingTrack(track: MediaStreamTrack): void {
+	const source = recordingSources.get(track);
+	if (source == null) return;
+	source.disconnect();
+	recordingSources.delete(track);
+}
+
+function recordingFileName(): string {
+	const now = new Date();
+	const pad = (n: number) => String(n).padStart(2, '0');
+	return `voice-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.webm`;
+}
+
+async function uploadRecording(blob: Blob): Promise<void> {
+	const roomId = state.room?.id;
+	if (roomId == null || blob.size === 0) return;
+	const form = new FormData();
+	form.append('file', blob, recordingFileName());
+	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'include' });
+	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
+	const file = await res.json() as Misskey.entities.DriveFile;
+	await misskeyApi('chat/messages/create-to-room', { toRoomId: roomId, fileId: file.id });
+}
+
+function flushRecordingChunk(force: boolean): void {
+	if (recordingChunks.length === 0) return;
+	if (!force && recordingBytes < RECORDING_CHUNK_BYTES) return;
+	const blob = new Blob(recordingChunks, { type: recorder?.mimeType ?? 'audio/webm' });
+	recordingChunks = [];
+	recordingBytes = 0;
+	recordingUploads.push(uploadRecording(blob).catch(err => {
+		console.error(err);
+	}));
+}
+
 function resetStatusDelivery(): void {
 	if (statusDelivery?.timer != null) window.clearTimeout(statusDelivery.timer);
 	statusDelivery = null;
@@ -75,7 +136,7 @@ function resetStatusDelivery(): void {
 function reportStatus(room: Room, force = false): void {
 	const roomId = state.room?.id;
 	if (current !== room || roomId == null || state.status === 'connecting') return;
-	const status = { roomId, sessionId: room.localParticipant.sid, micMuted: !state.micEnabled, deafened: state.deafened };
+	const status = { roomId, sessionId: room.localParticipant.sid, micMuted: !state.micEnabled, deafened: state.deafened, recording: state.recording };
 	if (statusDelivery?.room !== room || statusDelivery.latest.sessionId !== status.sessionId) {
 		resetStatusDelivery();
 		statusDelivery = { room, latest: status, pending: status, sending: false, retryDelay: 1000, timer: null, stopped: false };
@@ -216,6 +277,73 @@ async function disconnectCurrentRoom(): Promise<void> {
 	}
 }
 
+/** arti: start recording the voices of the call (local microphone + remote participants) */
+export async function startRecording(): Promise<void> {
+	const room = current;
+	if (room == null || recorder != null || state.status !== 'connected') return;
+	const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+	if (Context == null || typeof MediaRecorder === 'undefined') return;
+
+	const context = new Context();
+	const destination = context.createMediaStreamDestination();
+	recordingContext = context;
+	recordingDestination = destination;
+	recordingSources.clear();
+	recordingChunks = [];
+	recordingBytes = 0;
+	recordingUploads = [];
+
+	const lk = livekit;
+	if (lk != null) {
+		const mic = room.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.track;
+		if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack);
+		for (const participant of room.remoteParticipants.values()) {
+			for (const publication of participant.trackPublications.values()) {
+				if (publication.kind !== lk.Track.Kind.Audio) continue;
+				const track = publication.track?.mediaStreamTrack;
+				if (track != null) addRecordingTrack(track);
+			}
+		}
+	}
+
+	const mimeType = recordingMimeType();
+	const rec = new MediaRecorder(destination.stream, {
+		...(mimeType != null ? { mimeType } : {}),
+		audioBitsPerSecond: 64_000,
+	});
+	recorder = rec;
+	rec.ondataavailable = (ev) => {
+		if (ev.data.size === 0) return;
+		recordingChunks.push(ev.data);
+		recordingBytes += ev.data.size;
+		flushRecordingChunk(false);
+	};
+	rec.onstop = () => {
+		flushRecordingChunk(true);
+		recordingContext?.close().catch(() => {});
+		recordingContext = null;
+		recordingDestination = null;
+		recordingSources.clear();
+		recorder = null;
+	};
+	rec.start(10_000);
+
+	state.recording = true;
+	state.recordingStartedAt = Date.now();
+	reportStatus(room, true);
+}
+
+/** arti: stop recording and upload what is left */
+export function stopRecording(): void {
+	const rec = recorder;
+	if (rec == null) return;
+	state.recording = false;
+	state.recordingStartedAt = null;
+	if (current != null) reportStatus(current, true);
+	rec.stop();
+	void Promise.allSettled(recordingUploads);
+}
+
 export async function joinVoiceCall(room: Misskey.entities.ChatRoom, options: { micEnabled?: boolean } = {}): Promise<void> {
 	migrateParticipantVolumes();
 	// 前の通話の切断を待つあいだに別の参加が始まったら、この参加は捨てる。
@@ -288,6 +416,7 @@ export async function joinVoiceCall(room: Misskey.entities.ChatRoom, options: { 
 
 export async function leaveVoiceCall(): Promise<void> {
 	const attempt = ++joinAttempt;
+	stopRecording();
 	await disconnectCurrentRoom();
 	// 切れるのを待つあいだに次の通話に入り始めていたら、その通話の表示を消さない
 	if (attempt === joinAttempt) resetState();
@@ -632,6 +761,7 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 	room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
 		if (!isCurrent()) return;
 		if (track.kind === Track.Kind.Audio) {
+			addRecordingTrack(track.mediaStreamTrack);
 			window.document.body.appendChild(track.attach());
 			applyVolume(participant);
 		} else if (publication.source === Track.Source.ScreenShare) {
@@ -642,6 +772,7 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 
 	room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
 		if (track.kind === Track.Kind.Audio) {
+			removeRecordingTrack(track.mediaStreamTrack);
 			for (const element of track.detach()) element.remove();
 		} else if (publication.source === Track.Source.ScreenShare) {
 			for (const view of screenShareViews.get(participant.identity) ?? []) track.detach(view.element);
@@ -665,6 +796,7 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 		if (!isCurrent()) return;
 		if (publication.source === Track.Source.Microphone) {
 			startLocalMeter(room);
+			if (track != null) addRecordingTrack(track.mediaStreamTrack);
 			return;
 		}
 		if (publication.source !== Track.Source.ScreenShare || track == null) return;
@@ -773,6 +905,11 @@ function failToConnect(err?: unknown): void {
 
 function resetState(): void {
 	resetStatusDelivery();
+	if (recorder != null) {
+		try { recorder.stop(); } catch { /* already stopped */ }
+	}
+	state.recording = false;
+	state.recordingStartedAt = null;
 	stopLocalMeter?.();
 	unwatchMicrophoneTrack?.();
 	screenShareTracks.clear();

@@ -112,7 +112,7 @@ export class RemoteVoiceCallService {
 	}
 
 	@bindThis
-	public async reportStatus(me: MiLocalUser, room: MiChatRoom, owner: MiRemoteUser, sessionId: string, status: { micMuted: boolean; deafened: boolean }): Promise<void> {
+	public async reportStatus(me: MiLocalUser, room: MiChatRoom, owner: MiRemoteUser, sessionId: string, status: { micMuted: boolean; deafened: boolean; recording?: boolean }): Promise<void> {
 		if (!this.isEnabled) throw new RemoteVoiceCallError('forbidden');
 		const ownerUrl = await this.trustedOwnerUrlOf(owner);
 		if (ownerUrl == null) throw new RemoteVoiceCallError('forbidden');

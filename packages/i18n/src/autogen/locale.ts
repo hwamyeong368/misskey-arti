@@ -13741,6 +13741,18 @@ export interface Locale extends ILocale {
          */
         "remoteHostNotice": ParameterizedString<"host" | "host">;
         /**
+         * 録音を開始
+         */
+        "startRecording": string;
+        /**
+         * 録音を停止
+         */
+        "stopRecording": string;
+        /**
+         * 録音中
+         */
+        "recording": string;
+        /**
          * このルームのサーバーは通話に対応していません。
          */
         "remoteHostUnsupported": string;
