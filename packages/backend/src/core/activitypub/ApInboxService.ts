@@ -671,7 +671,7 @@ export class ApInboxService {
 		const targetRoom = this.parseChatRoomUri(getApId(activity.target));
 		if (targetRoom) {
 			if (getApId(activity.object) !== actor.uri) return 'skip: can only remove yourself from a chat room';
-			const room = await this.findFederatedChatRoom(targetRoom);
+			const room = await this.findFederatedChatRoom(targetRoom, { allowLocalRoomWithForeignHost: true });
 			if (room == null) return 'skip: chat room not found';
 			await this.chatRoomMembershipsRepository.delete({ roomId: room.id, userId: actor.id });
 			return 'ok: left chat room';
@@ -872,12 +872,18 @@ export class ApInboxService {
 	 * This stops a remote server from naming one of our room ids to get into it.
 	 */
 	@bindThis
-	private async findFederatedChatRoom(target: { roomId: MiChatRoom['id']; host: string }): Promise<MiChatRoom | null> {
+	private async findFederatedChatRoom(target: { roomId: MiChatRoom['id']; host: string }, options?: { allowLocalRoomWithForeignHost?: boolean }): Promise<MiChatRoom | null> {
 		const room = await this.chatRoomsRepository.findOne({ where: { id: target.roomId }, relations: { owner: true } });
 		if (room == null || room.owner == null) return null;
 
 		const roomIsLocal = this.utilityService.isSelfHost(target.host);
-		if (roomIsLocal ? room.owner.host != null : room.owner.host !== target.host) return null;
+		if (roomIsLocal) return room.owner.host == null ? room : null;
+
+		// arti: another server names its own copy of a room (same id, its own host) in chat
+		// messages, Accepts and Removes. A room that is local to us can still be the target;
+		// membership and invitation checks decide whether the actor may act on it.
+		if (options?.allowLocalRoomWithForeignHost && room.owner.host == null) return room;
+		if (room.owner.host !== target.host) return null;
 
 		return room;
 	}
@@ -923,7 +929,7 @@ export class ApInboxService {
 
 			if (roomTarget) {
 				// group chat: ChatService checks that the actor is a member
-				const room = await this.findFederatedChatRoom(roomTarget);
+				const room = await this.findFederatedChatRoom(roomTarget, { allowLocalRoomWithForeignHost: true });
 				if (room == null) return 'skip: chat room not found';
 
 				// our copy of a remote room only knows its owner at first.
@@ -1012,9 +1018,9 @@ export class ApInboxService {
 	@bindThis
 	private async acceptInvite(actor: MiRemoteUser, invite: IInvite): Promise<string> {
 		const target = this.getChatRoomUriFromInvite(invite);
-		if (target == null || !this.utilityService.isSelfHost(target.host)) return 'skip: not a room of this server';
+		if (target == null) return 'skip: invalid room URI';
 
-		const room = await this.findFederatedChatRoom(target);
+		const room = await this.findFederatedChatRoom(target, { allowLocalRoomWithForeignHost: true });
 		if (room == null) return 'skip: chat room not found';
 
 		// joinToRoom requires a pending invitation for the actor, so nobody can join uninvited
@@ -1031,9 +1037,9 @@ export class ApInboxService {
 	@bindThis
 	private async rejectInvite(actor: MiRemoteUser, invite: IInvite): Promise<string> {
 		const target = this.getChatRoomUriFromInvite(invite);
-		if (target == null || !this.utilityService.isSelfHost(target.host)) return 'skip: not a room of this server';
+		if (target == null) return 'skip: invalid room URI';
 
-		const room = await this.findFederatedChatRoom(target);
+		const room = await this.findFederatedChatRoom(target, { allowLocalRoomWithForeignHost: true });
 		if (room == null) return 'skip: chat room not found';
 
 		await this.chatRoomInvitationsRepository.delete({ roomId: room.id, userId: actor.id });
@@ -1045,7 +1051,7 @@ export class ApInboxService {
 		const target = this.getChatRoomUriFromInvite(invite);
 		if (target == null) return 'skip: invalid room URI';
 
-		const room = await this.findFederatedChatRoom(target);
+		const room = await this.findFederatedChatRoom(target, { allowLocalRoomWithForeignHost: true });
 		if (room == null || room.ownerId !== actor.id) return 'skip: only the room owner can cancel an invitation';
 
 		const inviteeUri = getApHrefNullable(invite.target);
