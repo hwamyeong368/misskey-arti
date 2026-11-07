@@ -17,6 +17,7 @@ import { NoteDeleteService } from '@/core/NoteDeleteService.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { ChatService } from '@/core/ChatService.js';
+import { ChatVoiceService } from '@/core/ChatVoiceService.js';
 import { acquireApObjectLock } from '@/misc/distributed-lock.js';
 import { concat, toArray, toSingle, unique } from '@/misc/prelude/array.js';
 import type Logger from '@/logger.js';
@@ -95,6 +96,7 @@ export class ApInboxService {
 		private noteDeleteService: NoteDeleteService,
 		private notificationService: NotificationService,
 		private chatService: ChatService,
+		private chatVoiceService: ChatVoiceService,
 		private apResolverService: ApResolverService,
 		private apDbResolverService: ApDbResolverService,
 		private apLoggerService: ApLoggerService,
@@ -840,6 +842,9 @@ export class ApInboxService {
 		} else if (getApType(object) === 'Note') {
 			await this.apNoteService.updateNote(object, actor, resolver).catch(err => console.error(err));
 			return 'ok: Note updated';
+		} else if (getApType(object) === 'ChatRoomVoiceState') {
+			// arti: the owner of a mirror room reports who is in its call
+			return await this.chatVoiceService.receiveRemoteSnapshot(actor, object);
 		} else {
 			return `skip: Unknown type: ${getApType(object)}`;
 		}

@@ -179,6 +179,7 @@ const activitystreams = {
 		'Ignore': 'as:Ignore',
 		'Image': 'as:Image',
 		'Invite': 'as:Invite',
+		'ChatRoomVoiceState': 'cherrypick:ChatRoomVoiceState',
 		'Join': 'as:Join',
 		'Leave': 'as:Leave',
 		'Like': 'as:Like',
