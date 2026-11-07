@@ -335,6 +335,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</MkSwitch>
 							</SearchMarker>
 
+							<SearchMarker :keywords="['voice', 'call', 'remote']">
+								<MkSwitch v-model="federationForm.state.enableRemoteVoiceCall">
+									<template #label><SearchLabel>{{ i18n.ts._serverSettings.enableRemoteVoiceCall }}</SearchLabel><span v-if="federationForm.modifiedStates.enableRemoteVoiceCall" class="_modified">{{ i18n.ts.modified }}</span></template>
+									<template #caption><SearchText>{{ i18n.ts._serverSettings.enableRemoteVoiceCall_description }}</SearchText></template>
+								</MkSwitch>
+							</SearchMarker>
+
 							<SearchMarker :keywords="['cache', 'remote', 'files']">
 								<MkSwitch v-model="federationForm.state.cacheRemoteFiles">
 									<template #label><SearchLabel>{{ i18n.ts.cacheRemoteFiles }}</SearchLabel><span v-if="federationForm.modifiedStates.cacheRemoteFiles" class="_modified">{{ i18n.ts.modified }}</span></template>
@@ -494,6 +501,7 @@ const federationForm = useForm({
 	signToActivityPubGet: meta.signToActivityPubGet,
 	proxyRemoteFiles: meta.proxyRemoteFiles,
 	allowExternalApRedirect: meta.allowExternalApRedirect,
+	enableRemoteVoiceCall: meta.enableRemoteVoiceCall,
 	cacheRemoteFiles: meta.cacheRemoteFiles,
 	cacheRemoteSensitiveFiles: meta.cacheRemoteSensitiveFiles,
 }, async (state) => {
@@ -504,6 +512,7 @@ const federationForm = useForm({
 		signToActivityPubGet: state.signToActivityPubGet,
 		proxyRemoteFiles: state.proxyRemoteFiles,
 		allowExternalApRedirect: state.allowExternalApRedirect,
+		enableRemoteVoiceCall: state.enableRemoteVoiceCall,
 		cacheRemoteFiles: state.cacheRemoteFiles,
 		cacheRemoteSensitiveFiles: state.cacheRemoteSensitiveFiles,
 	});

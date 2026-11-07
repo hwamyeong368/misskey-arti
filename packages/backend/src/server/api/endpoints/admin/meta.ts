@@ -30,6 +30,10 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			enableRemoteVoiceCall: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
 			emailRequiredForSignup: {
 				type: 'boolean',
 				optional: false, nullable: false,
@@ -693,6 +697,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				translatorAvailable: instance.deeplAuthKey != null,
 				cacheRemoteFiles: instance.cacheRemoteFiles,
 				cacheRemoteSensitiveFiles: instance.cacheRemoteSensitiveFiles,
+				enableRemoteVoiceCall: instance.enableRemoteVoiceCall,
 				pinnedUsers: instance.pinnedUsers,
 				hiddenTags: instance.hiddenTags,
 				blockedHosts: instance.blockedHosts,

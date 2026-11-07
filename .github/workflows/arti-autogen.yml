@@ -42,8 +42,8 @@ jobs:
       - name: Prepare config
         run: cp .config/example.yml .config/default.yml
 
-      - name: Build backend
-        run: pnpm --filter backend build
+      - name: Build
+        run: pnpm build
 
       - name: Generate api.json
         run: pnpm --filter backend generate-api-json

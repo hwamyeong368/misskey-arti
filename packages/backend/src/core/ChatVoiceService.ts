@@ -17,7 +17,8 @@ import type { WebhookEvent } from 'livekit-server-sdk';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository, ChatRoomsRepository, UsersRepository } from '@/models/_.js';
 import type { MiChatRoom } from '@/models/ChatRoom.js';
-import type { MiLocalUser, MiUser } from '@/models/User.js';
+import type { MiMeta } from '@/models/Meta.js';
+import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import type { Packed } from '@/misc/json-schema.js';
 import { bindThis } from '@/decorators.js';
 import { reportedVoiceStatus } from '@/core/voice-participant-status.js';
@@ -30,8 +31,15 @@ import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { RoleService } from '@/core/RoleService.js';
 import type { RolePolicies } from '@/core/RoleService.js';
 import { LoggerService } from '@/core/LoggerService.js';
+import { HostPolicyService } from '@/core/HostPolicyService.js';
+import type { IceServer } from '@/core/CloudflareTurnService.js';
 
 const REFRESH_DELAY_MS = 500;
+
+/** arti: whether this server lets its users join voice calls hosted by other servers (stage 2) */
+export function isRemoteVoiceCallEnabled(meta: Pick<MiMeta, 'enableRemoteVoiceCall' | 'federation'>): boolean {
+	return meta.enableRemoteVoiceCall && meta.federation !== 'none';
+}
 
 // LiveKit が再起動して room_finished を送らなかった場合でも表示が残らないよう、
 // スナップショットには寿命を付け、通話中のルームは定期的に読み直す。
@@ -115,6 +123,8 @@ type AdmissionContext = {
 	users: Read<Map<MiUser['id'], MiUser>>;
 	memberIds: Read<Set<MiUser['id']>>;
 	policies: Map<MiUser['id'], Read<RolePolicies>>;
+	/** arti: whether each remote participant's server is refused (blocked, suspended, not federated). Missing = could not decide */
+	refusedHosts: Map<string, boolean>;
 	errors: unknown[];
 };
 
@@ -131,11 +141,11 @@ type Admission = 'admitted' | 'denied' | 'unverified';
  */
 type AdmissionCheck = 'join' | 'sweep';
 
-/** 通話に入るためのもの。iceServers は TURN を使わないので常に null (LiveKit が渡すものを使う) */
+/** 通話に入るためのもの。iceServers は TURN を使わないとき null */
 export type JoinCredentials = {
 	url: string;
 	token: string;
-	iceServers: null;
+	iceServers: IceServer[] | null;
 };
 
 /**
@@ -162,10 +172,14 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		@Inject(DI.usersRepository)
 		private usersRepository: UsersRepository,
 
+		@Inject(DI.meta)
+		private meta: MiMeta,
+
 		private liveKitService: LiveKitService,
 		private userEntityService: UserEntityService,
 		private globalEventService: GlobalEventService,
 		private roleService: RoleService,
+		private hostPolicyService: HostPolicyService,
 		private loggerService: LoggerService,
 	) {
 		this.logger = this.loggerService.getLogger('chat-voice');
@@ -184,6 +198,59 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 			canScreenShare,
 		});
 		return { url: this.liveKitService.getPublicUrl(), token, iceServers: null };
+	}
+
+	/**
+	 * arti: issue a join token to a user of another server for a room hosted here.
+	 * Returns 'forbidden' for any room-level refusal so the caller cannot learn
+	 * whether the room exists.
+	 */
+	@bindThis
+	public async issueRemoteJoinToken(user: MiRemoteUser, roomId: MiChatRoom['id'], canScreenShareRequested: boolean): Promise<(JoinCredentials & { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }) | 'forbidden'> {
+		if (!this.liveKitService.isEnabled || !isRemoteVoiceCallEnabled(this.meta)) return 'forbidden';
+		if (user.host == null) return 'forbidden';
+
+		// Read everything before deciding, so the answer and its timing do not reveal whether the room exists
+		const [room, isMember, isRefusedHost, policies] = await Promise.all([
+			this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: { owner: true } }),
+			this.chatRoomMembershipsRepository.exists({ where: { roomId, userId: user.id } }),
+			this.hostPolicyService.isRefusedRemoteHost(user.host),
+			this.roleService.getUserPolicies(user.id),
+		]);
+
+		if (room == null || room.isArchived || room.owner == null || room.owner.host != null) return 'forbidden';
+		if (user.isSuspended || user.isDeleted) return 'forbidden';
+		if (isRefusedHost) return 'forbidden';
+		if (!isMember) return 'forbidden';
+		if (!policies.canVoiceCall || policies.chatAvailability !== 'available') return 'forbidden';
+
+		await this.liveKitService.ensureRoom(room.id, MAX_ROOM_MEMBERS + 1);
+		const token = await this.liveKitService.createJoinToken({
+			roomId: room.id,
+			identity: this.liveKitService.identityOf(user),
+			userId: user.id,
+			canScreenShare: canScreenShareRequested && policies.canScreenShare,
+		});
+		const snapshot = await this.snapshotOf(room.id);
+		return { url: this.liveKitService.getPublicUrl(), token, iceServers: null, participants: snapshot.participants, updatedAt: snapshot.updatedAt };
+	}
+
+	/** Current participant snapshot of a room hosted here, for a remote server. */
+	@bindThis
+	public async snapshotOf(roomId: MiChatRoom['id']): Promise<{ participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }> {
+		const raw = await this.redisClient.get(this.keyOf(roomId));
+		if (raw == null) return { participants: [], updatedAt: Date.now() };
+		const snapshot = JSON.parse(raw) as VoiceSnapshot;
+		return {
+			participants: snapshot.participants.map(p => ({ identity: p.identity, screenSharing: p.screenSharing, ...reportedVoiceStatus(p) })),
+			updatedAt: snapshot.updatedAt,
+		};
+	}
+
+	/** arti: remember the participants of a call hosted by another server. */
+	@bindThis
+	public async storeRemoteSnapshot(room: MiChatRoom, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[], updatedAt: number): Promise<void> {
+		await this.redisClient.set(`chatVoice:remote:${room.id}`, JSON.stringify({ participants, updatedAt }), 'EX', 600);
 	}
 
 	/** 認証したユーザー本人の、接続中のセッションの設定 (マイク・スピーカー) だけを受け付ける */
@@ -216,15 +283,40 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 	public async getStates(me: { id: MiUser['id'] }, roomIds: MiChatRoom['id'][]): Promise<Packed<'ChatRoomVoiceState'>[]> {
 		if (roomIds.length === 0) return [];
 		const raws = await this.redisClient.mget(...roomIds.map(roomId => this.keyOf(roomId)));
+		const remoteRaws = await this.redisClient.mget(...roomIds.map(roomId => `chatVoice:remote:${roomId}`));
 		const states: Packed<'ChatRoomVoiceState'>[] = [];
 		for (let i = 0; i < roomIds.length; i++) {
 			const raw = raws[i];
-			if (raw == null) continue;
+			if (raw == null) {
+				// arti: a room hosted by another server has no local snapshot; use the one its owner sent
+				const remoteRaw = remoteRaws[i];
+				if (remoteRaw == null) continue;
+				const remote = JSON.parse(remoteRaw) as { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number };
+				if (remote.participants.length === 0) continue;
+				states.push(await this.packRemote(roomIds[i], remote, me));
+				continue;
+			}
 			const snapshot = JSON.parse(raw) as VoiceSnapshot;
 			if (snapshot.participants.length === 0) continue;
 			states.push(await this.pack(roomIds[i], snapshot, me));
 		}
 		return states;
+	}
+
+	/** arti: pack a snapshot received from the server that hosts the room. */
+	private async packRemote(roomId: MiChatRoom['id'], snapshot: { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }, me: { id: MiUser['id'] }): Promise<Packed<'ChatRoomVoiceState'>> {
+		const users = await this.usersRepository.findBy({ uri: In(snapshot.participants.map(p => p.identity)) });
+		const userIdByIdentity = new Map(users.map(user => [user.uri, user.id]));
+		const packedUsers = await this.userEntityService.packMany([...new Set(userIdByIdentity.values())], me);
+		const userById = new Map(packedUsers.map(user => [user.id, user]));
+		const participants: Packed<'ChatRoomVoiceState'>['participants'] = [];
+		for (const p of snapshot.participants) {
+			const userId = userIdByIdentity.get(p.identity);
+			const user = userId != null ? userById.get(userId) : undefined;
+			if (user == null) continue;
+			participants.push({ identity: p.identity, user, screenSharing: p.screenSharing, ...reportedVoiceStatus(p) });
+		}
+		return { roomId, participants, updatedAt: snapshot.updatedAt };
 	}
 
 	@bindThis
@@ -481,7 +573,17 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 			Promise.all(ids.map(async userId => [userId, await read(() => this.roleService.getUserPolicies(userId))] as const)),
 		]);
 
-		return { room, users, memberIds, policies: new Map(policies), errors };
+		// arti: decide once per remote host whether this server refuses it
+		const refusedHosts = new Map<string, boolean>();
+		if (users.ok) {
+			const hosts = [...new Set([...users.value.values()].flatMap(user => user.host ?? []))];
+			await Promise.all(hosts.map(async host => {
+				const refused = await read(() => this.hostPolicyService.isRefusedRemoteHost(host));
+				if (refused.ok) refusedHosts.set(host, refused.value);
+			}));
+		}
+
+		return { room, users, memberIds, policies: new Map(policies), refusedHosts, errors };
 	}
 
 	/**
@@ -509,8 +611,14 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		} else {
 			const user = context.users.value.get(participant.userId);
 			if (user == null || user.isSuspended || user.isDeleted) return 'denied';
-			// 他のサーバーのユーザーは、まだ扱わない
-			if (user.host != null) return 'denied';
+			// arti: remote participants are allowed once remote voice calls are enabled,
+			// unless their server is refused (blocked, suspended, or not federated)
+			if (user.host != null) {
+				if (!isRemoteVoiceCallEnabled(this.meta) || user.uri == null) return 'denied';
+				const refused = context.refusedHosts.get(user.host);
+				if (refused === true) return 'denied';
+				if (refused == null) unverified = true;
+			}
 			if (participant.identity !== this.liveKitService.identityOf(user)) return 'denied';
 		}
 

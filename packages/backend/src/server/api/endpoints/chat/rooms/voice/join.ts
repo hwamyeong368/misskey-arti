@@ -8,8 +8,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository } from '@/models/_.js';
+import type { MiRemoteUser } from '@/models/User.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatVoiceService } from '@/core/ChatVoiceService.js';
+import { RemoteVoiceCallService, RemoteVoiceCallError } from '@/core/RemoteVoiceCallService.js';
 import { LiveKitService } from '@/core/LiveKitService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { ApiError } from '@/server/api/error.js';
@@ -79,6 +81,16 @@ export const meta = {
 			code: 'VOICE_CALL_UNAVAILABLE',
 			id: '6467d072-503a-4ed0-b3ed-36c10637d298',
 		},
+		remoteHostUnsupported: {
+			message: 'The server that owns this room does not support voice calls.',
+			code: 'REMOTE_HOST_UNSUPPORTED',
+			id: '4e71ab43-098d-4c57-84af-39ad6a1a8e37',
+		},
+		remoteHostUnreachable: {
+			message: 'Could not reach the server that owns this room.',
+			code: 'REMOTE_HOST_UNREACHABLE',
+			id: '65a8e792-2bd4-4808-8133-39f1cdcb60b9',
+		},
 	},
 } as const;
 
@@ -96,6 +108,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	constructor(
 		private chatService: ChatService,
 		private chatVoiceService: ChatVoiceService,
+		private remoteVoiceCallService: RemoteVoiceCallService,
 		private liveKitService: LiveKitService,
 		private roleService: RoleService,
 
@@ -118,14 +131,29 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
-			// 他のサーバーが持つルームの通話は、まだ扱わない
-			if (room.owner?.host != null || room.isArchived || me.isDeleted) {
+			// arti: a room hosted by another server runs its call there
+			if (room.isArchived || me.isDeleted) {
 				throw new ApiError(meta.errors.voiceCallUnavailable);
 			}
 
 			const policies = await this.roleService.getUserPolicies(me.id);
 			if (!policies.canVoiceCall) {
 				throw new ApiError(meta.errors.voiceCallUnavailable);
+			}
+
+			if (room.owner?.host != null) {
+				try {
+					return await this.remoteVoiceCallService.requestJoin(me, room, room.owner as MiRemoteUser, policies.canScreenShare);
+				} catch (err) {
+					if (err instanceof RemoteVoiceCallError) {
+						switch (err.reason) {
+							case 'unsupported': throw new ApiError(meta.errors.remoteHostUnsupported);
+							case 'forbidden': throw new ApiError(meta.errors.voiceCallUnavailable);
+							case 'unreachable': throw new ApiError(meta.errors.remoteHostUnreachable);
+						}
+					}
+					throw err;
+				}
 			}
 
 			return await this.chatVoiceService.issueJoinToken(me, room, policies.canScreenShare);

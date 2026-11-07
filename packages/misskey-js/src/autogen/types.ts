@@ -5725,6 +5725,7 @@ export type components = {
                 /** @default true */
                 miauth: boolean;
                 voiceCall: boolean;
+                remoteVoiceCall: boolean;
             };
             proxyAccountName: string | null;
             /** @example false */
@@ -9689,6 +9690,7 @@ export interface operations {
                     'application/json': {
                         cacheRemoteFiles: boolean;
                         cacheRemoteSensitiveFiles: boolean;
+                        enableRemoteVoiceCall: boolean;
                         emailRequiredForSignup: boolean;
                         enableHcaptcha: boolean;
                         hcaptchaSiteKey: string | null;
@@ -13351,6 +13353,7 @@ export interface operations {
                     signToActivityPubGet?: boolean;
                     allowExternalApRedirect?: boolean;
                     enableRemoteNotesCleaning?: boolean;
+                    enableRemoteVoiceCall?: boolean;
                     remoteNotesCleaningExpiryDaysForEachNotes?: number;
                     remoteNotesCleaningMaxProcessingDurationInMinutes?: number;
                     showRoleBadgesOfRemoteUsers?: boolean;

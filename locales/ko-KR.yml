@@ -1825,6 +1825,8 @@ _serverSettings:
   proxyRemoteFiles_description: "활성화하면 리모트 파일을 프록시로 제공합니다. 이미지의 섬네일 생성이나 유저의 개인정보 보호에 도움을 줍니다."
   allowExternalApRedirect: "ActivityPub 경유 조회에 리디렉션 허가"
   allowExternalApRedirect_description: "활성화하면 다른 서버가 이 서버를 통해 제3자의 콘텐츠를 조회할 수 있습니다만, 콘텐츠의 사칭 문제가 생길 수 있습니다."
+  enableRemoteVoiceCall: "다른 서버 통화 참가 허용"
+  enableRemoteVoiceCall_description: "다른 서버가 만든 방의 통화에 이 서버 사용자가 참가할 수 있게 합니다. 통화 기능 자체가 켜져 있어야 합니다."
   userGeneratedContentsVisibilityForVisitor: "비이용자에 대한 유저 작성 콘텐츠의 공개 범위"
   userGeneratedContentsVisibilityForVisitor_description: "조정을 하기 힘든 부적절한 리모트 콘텐츠 등이 자신의 서버 경유로 의도치 않게 인터넷에 공개되는 문제의 방지 등에 도움을 줍니다."
   userGeneratedContentsVisibilityForVisitor_description2: "서버에서 받은 리모트 콘텐츠를 포함해 서버 내의 모든 콘텐츠를 무조건 인터넷에 공개하는 것에는 위험이 따릅니다. 특히, 분산형 특성에 대해 모르는 열람자에게는 리모트 콘텐츠여도 서버 내에서 작성된 콘텐츠라고 잘못 인식할 수 있기에 주의가 필요합니다."

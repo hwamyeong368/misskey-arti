@@ -690,6 +690,12 @@ export class MiMeta {
 	})
 	public federationHosts: string[];
 
+	// arti: allow joining voice calls hosted by other servers (stage 2)
+	@Column('boolean', {
+		default: false,
+	})
+	public enableRemoteVoiceCall: boolean;
+
 	@Column('varchar', {
 		length: 128,
 		default: 'local',
