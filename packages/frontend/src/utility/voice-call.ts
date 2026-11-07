@@ -503,12 +503,16 @@ export async function startRecording(): Promise<void> {
 	// suppression, auto gain), which makes music and quiet voices sound thin
 	try {
 		const raw = await navigator.mediaDevices.getUserMedia({
-			audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+			audio: { deviceId: prefer.s['voiceCall.inputDeviceId'] ?? undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
 		});
+		if (current !== room || recordingParts.get('mic')?.recorder.state !== 'recording') {
+			raw.getTracks().forEach(track => track.stop());
+			return;
+		}
 		recordingRawMicStream = raw;
 		const track = raw.getAudioTracks()[0];
 		if (track != null) {
-			track.enabled = state.micEnabled;
+			track.enabled = state.micEnabled && !state.deafened;
 			addRecordingTrack(track, 'mic');
 		}
 	} catch {
@@ -649,9 +653,6 @@ export async function leaveVoiceCall(): Promise<void> {
 export async function setMicEnabled(enabled: boolean): Promise<void> {
 	const room = current;
 	if (room == null) return;
-	if (recordingRawMicStream != null) {
-		for (const track of recordingRawMicStream.getAudioTracks()) track.enabled = enabled;
-	}
 	prefer.commit('voiceCall.micEnabled', enabled);
 	if (enabled) {
 		// スピーカーを切ったままマイクだけを入れると、聞こえないまま話すことになる。マイクが入ったらスピーカーも戻す。
@@ -674,6 +675,7 @@ export async function restartMicrophone(): Promise<void> {
 export function setDeafened(deafened: boolean): void {
 	deafenRevision++;
 	state.deafened = deafened;
+	if (deafened) setRecordingMicrophoneEnabled(false);
 	if (current == null) return;
 	const room = current;
 	applyVolumes(room);
@@ -912,6 +914,10 @@ function captureOptions(): AudioCaptureOptions {
 	};
 }
 
+function setRecordingMicrophoneEnabled(enabled: boolean): void {
+	for (const track of recordingRawMicStream?.getAudioTracks() ?? []) track.enabled = enabled;
+}
+
 // undeafenAt: マイクが入ったらスピーカーも戻すとき、そう決めたときの deafenRevision
 async function enableMicrophone(room: Room, undeafenAt: number | null = null): Promise<void> {
 	try {
@@ -928,12 +934,14 @@ async function enableMicrophone(room: Room, undeafenAt: number | null = null): P
 			await disableMicrophone(room).catch(() => reportStatus(room));
 			return;
 		}
+		setRecordingMicrophoneEnabled(true);
 		startLocalMeter(room);
 		reportStatus(room);
 	} catch {
 		// マイクが無い・許可されない場合でも、聞くだけの参加者として通話に残る
 		if (current !== room) return;
 		state.micEnabled = false;
+		setRecordingMicrophoneEnabled(false);
 		stopLocalMeter?.();
 		reportStatus(room);
 		os.toast(i18n.ts._voiceCall.micUnavailable);
@@ -941,6 +949,8 @@ async function enableMicrophone(room: Room, undeafenAt: number | null = null): P
 }
 
 async function disableMicrophone(room: Room): Promise<void> {
+	// Stop the independent recording input before awaiting the call track.
+	setRecordingMicrophoneEnabled(false);
 	await room.localParticipant.setMicrophoneEnabled(false, captureOptions());
 	if (current !== room) return;
 	state.micEnabled = false;
@@ -1076,6 +1086,7 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 		// オーナーによる強制ミュート
 		if (participant === room.localParticipant && publication.source === Track.Source.Microphone) {
 			state.micEnabled = false;
+			setRecordingMicrophoneEnabled(false);
 			stopLocalMeter?.();
 			reportStatus(room);
 		}

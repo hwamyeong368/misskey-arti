@@ -80,6 +80,7 @@ export class RemoteVoiceCallService {
 
 	@bindThis
 	public async requestJoin(me: MiLocalUser, room: MiChatRoom, owner: MiRemoteUser, canScreenShare: boolean): Promise<JoinCredentials> {
+		if (!this.isEnabled) throw new RemoteVoiceCallError('forbidden');
 		const ownerUrl = await this.trustedOwnerUrlOf(owner);
 		if (ownerUrl == null) throw new RemoteVoiceCallError('forbidden');
 
