@@ -171,6 +171,7 @@ export class MetaEntityService {
 				miauth: true,
 				// arti: voice calls in chat rooms (from choco)
 				voiceCall: this.config.voiceCall?.livekit != null,
+				remoteVoiceCall: instance.enableRemoteVoiceCall && instance.federation !== 'none',
 			},
 		};
 

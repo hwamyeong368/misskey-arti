@@ -185,6 +185,36 @@ export class ApRequestService {
 	}
 
 	/**
+	 * Signed POST that returns the JSON body, for talking to another server's
+	 * federation endpoint (arti: remote voice calls).
+	 */
+	@bindThis
+	public async signedPostJson(user: { id: MiUser['id'] }, url: string, object: unknown, timeout: number, options: { redirect?: 'follow' | 'manual'; size?: number } = {}): Promise<unknown> {
+		const body = JSON.stringify(object);
+		const keypair = await this.userKeypairService.getUserKeypair(user.id);
+		const req = await ApRequestCreator.createSignedPost({
+			key: {
+				privateKeyPem: keypair.privateKey,
+				keyId: `${this.config.url}/users/${user.id}#main-key`,
+			},
+			url,
+			body,
+			digest: undefined,
+			additionalHeaders: {},
+		});
+
+		const res = await this.httpRequestService.send(url, {
+			method: req.request.method,
+			headers: req.request.headers,
+			body,
+			timeout,
+			size: options.size,
+		});
+
+		return await res.json();
+	}
+
+	/**
 	 * Get AP object with http-signature
 	 * @param user http-signature user
 	 * @param url URL to fetch
