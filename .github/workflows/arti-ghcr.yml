@@ -80,7 +80,7 @@ jobs:
       - name: Prepare tags
         run: |
           echo "REGISTRY_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-          # Docker tags cannot contain '+', so 2026.10.1+bscone.b.arti.1 is published as 2026.10.1_bscone.b.arti.1
+          # Docker tags cannot contain '+', so 2026.10.1+bscone.b.CT.1 is published as 2026.10.1_bscone.b.CT.1
           version=$(jq -r .version package.json)
           echo "VERSION_TAG=${version//+/_}" >> $GITHUB_ENV
           echo "SHA_TAG=sha-${GITHUB_SHA::7}" >> $GITHUB_ENV
