@@ -787,8 +787,10 @@ export class ApRendererService {
 	 */
 	@bindThis
 	public async renderChatMessage(message: MiChatMessage, fromUser: MiUser, toUsers: MiUser[], roomId?: string): Promise<IPost> {
-		const to = toUsers
-			.filter(user => user.id !== fromUser.id)
+		// arti: CherryPick treats a message with exactly one recipient as a 1:1 chat,
+		// so a room message must list every member (the sender included).
+		const recipients = roomId != null ? toUsers : toUsers.filter(user => user.id !== fromUser.id);
+		const to = recipients
 			.map(user => this.userEntityService.isRemoteUser(user) ? user.uri : this.userEntityService.genLocalUserUri(user.id));
 
 		const file = message.fileId ? await this.driveFilesRepository.findOneBy({ id: message.fileId }) : null;
