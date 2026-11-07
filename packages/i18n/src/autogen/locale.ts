@@ -7244,6 +7244,14 @@ export interface Locale extends ILocale {
          */
         "allowExternalApRedirect_description": string;
         /**
+         * 他のサーバーの通話に参加できるようにする
+         */
+        "enableRemoteVoiceCall": string;
+        /**
+         * 他のサーバーが持つルームの通話に、このサーバーのユーザーが参加できるようにします。通話機能自体が有効になっている必要があります。
+         */
+        "enableRemoteVoiceCall_description": string;
+        /**
          * 非利用者に対するユーザー作成コンテンツの公開範囲
          */
         "userGeneratedContentsVisibilityForVisitor": string;

@@ -9690,6 +9690,7 @@ export interface operations {
                     'application/json': {
                         cacheRemoteFiles: boolean;
                         cacheRemoteSensitiveFiles: boolean;
+                        enableRemoteVoiceCall: boolean;
                         emailRequiredForSignup: boolean;
                         enableHcaptcha: boolean;
                         hcaptchaSiteKey: string | null;
