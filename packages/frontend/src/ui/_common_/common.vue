@@ -89,7 +89,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <XStreamIndicator/>
 
-<XVoiceCallBar/>
+<XVoiceCallBar v-if="voiceCall.status !== 'idle'"/>
 
 <div v-if="pendingApiRequestsCount > 0" id="wait"></div>
 
@@ -121,9 +121,10 @@ import { prefer } from '@/preferences.js';
 import { globalEvents } from '@/events.js';
 import { store } from '@/store.js';
 import XNavbar from '@/ui/_common_/navbar.vue';
-import XVoiceCallBar from '@/ui/_common_/voice-call-bar.vue';
+import { voiceCall } from '@/utility/voice-call.js';
 
 const XStreamIndicator = defineAsyncComponent(() => import('./stream-indicator.vue'));
+const XVoiceCallBar = defineAsyncComponent(() => import('./voice-call-bar.vue'));
 const XWidgets = defineAsyncComponent(() => import('./widgets.vue'));
 
 const drawerMenuShowing = defineModel<boolean>('drawerMenuShowing');
