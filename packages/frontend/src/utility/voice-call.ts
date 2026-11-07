@@ -115,7 +115,12 @@ async function uploadRecording(blob: Blob): Promise<void> {
 	if ($i != null) form.append('i', $i.token);
 	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'omit' });
 	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
-	const file = await res.json() as Misskey.entities.DriveFile;
+	let file = await res.json() as Misskey.entities.DriveFile;
+	// MP3 plays in more players than WebM/Opus
+	try {
+		const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
+		if (converted != null) file = converted;
+	} catch { /* keep the WebM when ffmpeg fails */ }
 	await misskeyApi('chat/messages/create-to-room', { toRoomId: roomId, fileId: file.id });
 }
 
