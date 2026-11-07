@@ -8,6 +8,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository } from '@/models/_.js';
+import type { MiRemoteUser } from '@/models/User.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatVoiceService } from '@/core/ChatVoiceService.js';
 import { RemoteVoiceCallService, RemoteVoiceCallError } from '@/core/RemoteVoiceCallService.js';
@@ -132,7 +133,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (room.owner?.host != null) {
 				try {
-					return await this.remoteVoiceCallService.requestJoin(me, room, room.owner, policies.canScreenShare);
+					return await this.remoteVoiceCallService.requestJoin(me, room, room.owner as MiRemoteUser, policies.canScreenShare);
 				} catch (err) {
 					if (err instanceof RemoteVoiceCallError) throw new ApiError(meta.errors.voiceCallUnavailable);
 					throw err;

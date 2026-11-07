@@ -32,6 +32,7 @@ import { RoleService } from '@/core/RoleService.js';
 import type { RolePolicies } from '@/core/RoleService.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { HostPolicyService } from '@/core/HostPolicyService.js';
+import type { IceServer } from '@/core/CloudflareTurnService.js';
 
 const REFRESH_DELAY_MS = 500;
 
@@ -138,11 +139,11 @@ type Admission = 'admitted' | 'denied' | 'unverified';
  */
 type AdmissionCheck = 'join' | 'sweep';
 
-/** 通話に入るためのもの。iceServers は TURN を使わないので常に null (LiveKit が渡すものを使う) */
+/** 通話に入るためのもの。iceServers は TURN を使わないとき null */
 export type JoinCredentials = {
 	url: string;
 	token: string;
-	iceServers: null;
+	iceServers: IceServer[] | null;
 };
 
 /**
