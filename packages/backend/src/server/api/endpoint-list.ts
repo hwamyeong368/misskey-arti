@@ -459,6 +459,7 @@ export * as 'chat/rooms/voice/kick' from './endpoints/chat/rooms/voice/kick.js';
 export * as 'chat/rooms/voice/mute' from './endpoints/chat/rooms/voice/mute.js';
 export * as 'chat/rooms/voice/states' from './endpoints/chat/rooms/voice/states.js';
 export * as 'chat/rooms/voice/status' from './endpoints/chat/rooms/voice/status.js';
+export * as 'chat/rooms/voice/convert-recording' from './endpoints/chat/rooms/voice/convert-recording.js';
 export * as 'chat/history' from './endpoints/chat/history.js';
 export * as 'chat/read-all' from './endpoints/chat/read-all.js';
 export * as 'v2/admin/emoji/list' from './endpoints/v2/admin/emoji/list.js';
