@@ -18,6 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<XThemePreviewing v-if="isThemePreviewMode"/>
 			<XAnnouncements v-if="$i"/>
 			<XStatusBars/>
+			<XVoiceCallBarSlot kind="top"/>
 			<div :class="$style.columnsWrapper">
 				<!-- passive: https://bugs.webkit.org/show_bug.cgi?id=281300 -->
 				<div ref="columnsEl" :class="[$style.columns, { [$style.center]: prefer.r['deck.columnAlign'].value === 'center', [$style.snapScroll]: snapScroll }]" @contextmenu.self.prevent="onContextmenu" @wheel.passive.self="onWheel">
@@ -124,6 +125,7 @@ import { startTour } from '@/utility/tour.js';
 import { closeTip } from '@/tips.js';
 
 const XStatusBars = defineAsyncComponent(() => import('@/ui/_common_/statusbars.vue'));
+const XVoiceCallBarSlot = defineAsyncComponent(() => import('@/ui/_common_/voice-call-bar-slot.vue'));
 const XAnnouncements = defineAsyncComponent(() => import('@/ui/_common_/announcements.vue'));
 
 const columnComponents = {

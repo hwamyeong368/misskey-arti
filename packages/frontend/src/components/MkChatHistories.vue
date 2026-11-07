@@ -17,6 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.messageBody">
 			<header v-if="item.message.toRoom" :class="$style.messageHeader">
 				<span :class="$style.messageHeaderName"><i class="ti ti-users"></i> {{ item.message.toRoom.name }}</span>
+				<span v-if="inCall(item.message.toRoomId) > 0" :class="$style.callBadge"><i class="ti ti-volume"></i> {{ i18n.tsx._voiceCall.inCallCount({ n: inCall(item.message.toRoomId!) }) }}</span>
 				<MkTime :time="item.message.createdAt" :class="$style.messageHeaderTime"/>
 			</header>
 			<header v-else :class="$style.messageHeader">
@@ -33,12 +34,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onActivated, onDeactivated, onMounted, ref } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
+import { useChatRoomVoiceStates } from '@/composables/use-chat-room-voice-states.js';
+import { isChatRoomVoiceAvailable } from '@/utility/chat-room-voice-availability.js';
 
 const $i = ensureSignin();
 
@@ -48,6 +51,14 @@ const history = ref<{
 	other: Misskey.entities.ChatMessage['fromUser'] | Misskey.entities.ChatMessage['toUser'] | null;
 	isMe: boolean;
 }[]>([]);
+
+const roomIds = computed(() => history.value.flatMap(item => isChatRoomVoiceAvailable(item.message.toRoom, $i.policies.canVoiceCall) ? [item.message.toRoomId!] : []));
+const voiceStates = useChatRoomVoiceStates(roomIds);
+
+function inCall(roomId: string | null | undefined): number {
+	if (roomId == null) return 0;
+	return voiceStates.value.get(roomId)?.participants.length ?? 0;
+}
 
 const initializing = ref(true);
 const fetching = ref(false);
@@ -191,6 +202,14 @@ onMounted(() => {
 
 .messageHeaderTime {
 	margin-left: auto;
+}
+
+.callBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.85em;
+	opacity: 0.8;
 }
 
 .messageBodyText {

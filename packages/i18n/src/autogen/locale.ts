@@ -8521,6 +8521,14 @@ export interface Locale extends ILocale {
              */
             "chatAvailability": string;
             /**
+             * 音声通話への参加
+             */
+            "canVoiceCall": string;
+            /**
+             * 画面共有
+             */
+            "canScreenShare": string;
+            /**
              * アップロード可能なファイル種別
              */
             "uploadableFileTypes": string;
@@ -13674,5 +13682,245 @@ export interface Locale extends ILocale {
          * MFM
          */
         "mfm": string;
+    };
+    "_voiceCall": {
+        /**
+         * 参加者を表示
+         */
+        "showParticipants": string;
+        /**
+         * 参加者を隠す
+         */
+        "hideParticipants": string;
+        /**
+         * チャットを開く
+         */
+        "openChat": string;
+        /**
+         * チャットを閉じる
+         */
+        "closeChat": string;
+        /**
+         * ほか{n}人
+         */
+        "otherParticipants": ParameterizedString<"n">;
+        /**
+         * マイクオン
+         */
+        "micOn": string;
+        /**
+         * マイク入力を検出
+         */
+        "micInputDetected": string;
+        /**
+         * マイクオフ
+         */
+        "micMuted": string;
+        /**
+         * スピーカーオフ
+         */
+        "deafened": string;
+        /**
+         * マイクを使用できません。
+         */
+        "micUnavailable": string;
+        /**
+         * 通話サーバーに接続できませんでした。
+         */
+        "connectionFailed": string;
+        /**
+         * この通話は{host}で開かれます。{host}にはあなたのIPアドレスが見えます。
+         */
+        "remoteHostNotice": ParameterizedString<"host" | "host">;
+        /**
+         * このルームのサーバーは通話に対応していません。
+         */
+        "remoteHostUnsupported": string;
+        /**
+         * 別のタブで通話に参加しました。
+         */
+        "joinedFromAnotherTab": string;
+        /**
+         * 通話から外されました。
+         */
+        "removedFromCall": string;
+        /**
+         * 通話が終了しました。
+         */
+        "callEnded": string;
+        /**
+         * 通話に参加
+         */
+        "join": string;
+        /**
+         * 通話を開始
+         */
+        "start": string;
+        /**
+         * 通話から退出
+         */
+        "leave": string;
+        /**
+         * マイクをオフ
+         */
+        "mute": string;
+        /**
+         * マイクをオン
+         */
+        "unmute": string;
+        /**
+         * スピーカーをオフ
+         */
+        "deafen": string;
+        /**
+         * スピーカーをオン
+         */
+        "undeafen": string;
+        /**
+         * 通話中
+         */
+        "inCall": string;
+        /**
+         * 接続中…
+         */
+        "connecting": string;
+        /**
+         * 再接続中…
+         */
+        "reconnecting": string;
+        /**
+         * タップして音声を再生
+         */
+        "enableAudio": string;
+        /**
+         * ルームに戻る
+         */
+        "backToRoom": string;
+        /**
+         * 通話設定
+         */
+        "settings": string;
+        /**
+         * マイク
+         */
+        "inputDevice": string;
+        /**
+         * スピーカー
+         */
+        "outputDevice": string;
+        /**
+         * エコーキャンセル
+         */
+        "echoCancellation": string;
+        /**
+         * ノイズ抑制
+         */
+        "noiseSuppression": string;
+        /**
+         * 自動音量調整
+         */
+        "autoGainControl": string;
+        /**
+         * 画面を共有
+         */
+        "shareScreen": string;
+        /**
+         * 共有を停止
+         */
+        "stopSharing": string;
+        /**
+         * 共有を見る
+         */
+        "watchStream": string;
+        /**
+         * 視聴をやめる
+         */
+        "stopWatching": string;
+        /**
+         * 画面共有中
+         */
+        "sharingScreen": string;
+        /**
+         * 音声も共有
+         */
+        "shareAudio": string;
+        /**
+         * 共有画質
+         */
+        "screenShareQuality": string;
+        /**
+         * 画面共有を開始できませんでした。
+         */
+        "screenShareFailed": string;
+        /**
+         * 画面共有が許可されていません。ブラウザやOSの設定で画面の共有を許可してください。
+         */
+        "screenSharePermissionDenied": string;
+        /**
+         * 全画面
+         */
+        "fullscreen": string;
+        /**
+         * ピクチャーインピクチャー
+         */
+        "pictureInPicture": string;
+        /**
+         * {name}さんの共有画面を見る
+         */
+        "watchScreenOf": ParameterizedString<"name">;
+        /**
+         * {name}さんの共有画面
+         */
+        "screenShareOf": ParameterizedString<"name">;
+        /**
+         * 大きく表示
+         */
+        "focusScreen": string;
+        "_quality": {
+            /**
+             * くっきり (1080p 15fps)
+             */
+            "sharp": string;
+            /**
+             * なめらか (720p 30fps)
+             */
+            "smooth": string;
+            /**
+             * 高画質 (1080p 30fps)
+             */
+            "high": string;
+        };
+        /**
+         * 声の音量
+         */
+        "voiceVolume": string;
+        /**
+         * 共有画面の音量
+         */
+        "screenShareVolume": string;
+        /**
+         * 強制ミュート
+         */
+        "forceMute": string;
+        /**
+         * 通話から外す
+         */
+        "kick": string;
+        /**
+         * {name}さんを通話から外しますか？
+         */
+        "kickConfirm": ParameterizedString<"name">;
+        /**
+         * {n}人が通話中
+         */
+        "inCallCount": ParameterizedString<"n">;
+        /**
+         * チャットを左に移動
+         */
+        "moveChatLeft": string;
+        /**
+         * チャットを右に移動
+         */
+        "moveChatRight": string;
     };
 }

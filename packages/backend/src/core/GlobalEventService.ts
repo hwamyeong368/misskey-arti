@@ -71,6 +71,7 @@ export interface MainEventTypes {
 	unreadNotification: Packed<'Notification'>;
 	unreadAntenna: MiAntenna;
 	newChatMessage: Packed<'ChatMessage'>;
+	chatRoomVoiceState: Packed<'ChatRoomVoiceState'>;
 	readAllAnnouncements: undefined;
 	myTokenRegenerated: undefined;
 	signin: {

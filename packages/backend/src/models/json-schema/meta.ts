@@ -361,6 +361,10 @@ export const packedMetaDetailedOnlySchema = {
 					optional: true, nullable: false,
 					default: true,
 				},
+				voiceCall: {
+					type: 'boolean',
+					optional: false, nullable: false,
+				},
 			},
 		},
 		proxyAccountName: {

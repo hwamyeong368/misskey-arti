@@ -7,47 +7,54 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader v-model:tab="tab" :reversed="tab === 'chat'" :tabs="headerTabs" :actions="headerActions">
 	<div v-if="tab === 'chat'" class="_spacer" style="--MI_SPACER-w: 700px;">
 		<div class="_gaps">
-			<div v-if="initializing">
-				<MkLoading/>
+			<!-- arti: 通話に入っているあいだはルームの上に通話画面 (ステージ) を出す。チャットはボタンで畳める -->
+			<div v-if="room && voiceCall.inThisCall.value" :class="[$style.stage, { [$style.stageFull]: !voiceChatOpen }]">
+				<XVoiceStage :room="room" :call="voiceCall" :chatOpen="voiceChatOpen" @toggleChat="voiceChatOpen = !voiceChatOpen"/>
 			</div>
-
-			<div v-else-if="messages.length === 0">
-				<div class="_gaps" style="text-align: center;">
-					<div>{{ i18n.ts._chat.noMessagesYet }}</div>
-					<template v-if="user">
-						<div v-if="user.chatScope === 'followers'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromFollowers }}</div>
-						<div v-else-if="user.chatScope === 'following'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromFollowing }}</div>
-						<div v-else-if="user.chatScope === 'mutual'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromMutualFollowing }}</div>
-						<div v-else-if="user.chatScope === 'none'">{{ i18n.ts._chat.thisUserNotAllowedChatAnyone }}</div>
-					</template>
-					<template v-else-if="room">
-						<div>{{ i18n.ts._chat.inviteUserToChat }}</div>
-					</template>
-				</div>
-			</div>
-
-			<div v-else ref="timelineEl" class="_gaps">
-				<div v-if="canFetchMore">
-					<MkButton :class="$style.more" :wait="moreFetching" primary rounded @click="fetchMore">{{ i18n.ts.loadMore }}</MkButton>
+			<XVoiceBanner v-else :call="voiceCall"/>
+			<div v-show="voiceChatOpen || !voiceCall.inThisCall.value" class="_gaps">
+				<div v-if="initializing">
+					<MkLoading/>
 				</div>
 
-				<TransitionGroup
-					:enterActiveClass="prefer.s.animation ? $style.transition_x_enterActive : ''"
-					:leaveActiveClass="prefer.s.animation ? $style.transition_x_leaveActive : ''"
-					:enterFromClass="prefer.s.animation ? $style.transition_x_enterFrom : ''"
-					:leaveToClass="prefer.s.animation ? $style.transition_x_leaveTo : ''"
-					:moveClass="prefer.s.animation ? $style.transition_x_move : ''"
-					tag="div" class="_gaps"
-				>
-					<template v-for="item in timeline.toReversed()" :key="item.id">
-						<XMessage v-if="item.type === 'item'" :message="item.data"/>
-						<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
-							<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
-							<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
-							<span>{{ item.prevText }} <i class="ti ti-chevron-down"></i></span>
-						</div>
-					</template>
-				</TransitionGroup>
+				<div v-else-if="messages.length === 0">
+					<div class="_gaps" style="text-align: center;">
+						<div>{{ i18n.ts._chat.noMessagesYet }}</div>
+						<template v-if="user">
+							<div v-if="user.chatScope === 'followers'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromFollowers }}</div>
+							<div v-else-if="user.chatScope === 'following'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromFollowing }}</div>
+							<div v-else-if="user.chatScope === 'mutual'">{{ i18n.ts._chat.thisUserAllowsChatOnlyFromMutualFollowing }}</div>
+							<div v-else-if="user.chatScope === 'none'">{{ i18n.ts._chat.thisUserNotAllowedChatAnyone }}</div>
+						</template>
+						<template v-else-if="room">
+							<div>{{ i18n.ts._chat.inviteUserToChat }}</div>
+						</template>
+					</div>
+				</div>
+
+				<div v-else ref="timelineEl" class="_gaps">
+					<div v-if="canFetchMore">
+						<MkButton :class="$style.more" :wait="moreFetching" primary rounded @click="fetchMore">{{ i18n.ts.loadMore }}</MkButton>
+					</div>
+
+					<TransitionGroup
+						:enterActiveClass="prefer.s.animation ? $style.transition_x_enterActive : ''"
+						:leaveActiveClass="prefer.s.animation ? $style.transition_x_leaveActive : ''"
+						:enterFromClass="prefer.s.animation ? $style.transition_x_enterFrom : ''"
+						:leaveToClass="prefer.s.animation ? $style.transition_x_leaveTo : ''"
+						:moveClass="prefer.s.animation ? $style.transition_x_move : ''"
+						tag="div" class="_gaps"
+					>
+						<template v-for="item in timeline.toReversed()" :key="item.id">
+							<XMessage v-if="item.type === 'item'" :message="item.data"/>
+							<div v-else-if="item.type === 'date'" :class="$style.dateDivider">
+								<span><i class="ti ti-chevron-up"></i> {{ item.nextText }}</span>
+								<span style="height: 1em; width: 1px; background: var(--MI_THEME-divider);"></span>
+								<span>{{ item.prevText }} <i class="ti ti-chevron-down"></i></span>
+							</div>
+						</template>
+					</TransitionGroup>
+				</div>
 			</div>
 
 			<div v-if="user && !user.canChat">
@@ -96,6 +103,9 @@ import XForm from './room.form.vue';
 import XSearch from './room.search.vue';
 import XMembers from './room.members.vue';
 import XInfo from './room.info.vue';
+import XVoiceBanner from './room.voice.banner.vue';
+import XVoiceStage from './room.voice.stage.vue';
+import { useChatRoomVoiceCall } from '@/composables/use-chat-room-voice-call.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import * as os from '@/os.js';
@@ -134,6 +144,8 @@ const messages = ref<NormalizedChatMessage[]>([]);
 const canFetchMore = ref(false);
 const user = ref<Misskey.entities.UserDetailed | null>(null);
 const room = ref<Misskey.entities.ChatRoom | null>(null);
+const voiceCall = useChatRoomVoiceCall(room);
+const voiceChatOpen = ref(true);
 const connection = ref<Misskey.IChannelConnection<Misskey.Channels['chatUser']> | Misskey.IChannelConnection<Misskey.Channels['chatRoom']> | null>(null);
 const showIndicator = ref(false);
 const timelineEl = useTemplateRef('timelineEl');
@@ -477,6 +489,18 @@ definePage(computed(() => {
 </script>
 
 <style lang="scss" module>
+.stage {
+	height: min(60vh, 560px);
+	min-height: 280px;
+	border-radius: var(--MI-radius);
+	overflow: clip;
+	background: var(--MI_THEME-panel);
+}
+
+.stageFull {
+	height: calc(100vh - 220px);
+}
+
 .transition_x_move,
 .transition_x_enterActive,
 .transition_x_leaveActive {

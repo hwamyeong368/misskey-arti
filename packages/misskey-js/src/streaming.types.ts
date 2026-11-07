@@ -2,6 +2,7 @@ import {
 	Antenna,
 	ChatMessage,
 	ChatMessageLite,
+	ChatRoomVoiceState,
 	DriveFile,
 	DriveFolder,
 	Note,
@@ -64,6 +65,7 @@ export type Channels = {
 			readAntenna: (payload: Antenna) => void;
 			receiveFollowRequest: (payload: User) => void;
 			announcementCreated: (payload: AnnouncementCreated) => void;
+			chatRoomVoiceState: (payload: ChatRoomVoiceState) => void;
 		};
 		receives: null;
 	};

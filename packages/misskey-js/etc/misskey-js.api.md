@@ -696,6 +696,7 @@ export type Channels = {
             readAntenna: (payload: Antenna) => void;
             receiveFollowRequest: (payload: User) => void;
             announcementCreated: (payload: AnnouncementCreated) => void;
+            chatRoomVoiceState: (payload: ChatRoomVoiceState) => void;
         };
         receives: null;
     };
@@ -1241,6 +1242,30 @@ type ChatRoomsUpdateRequest = operations['chat___rooms___update']['requestBody']
 
 // @public (undocumented)
 type ChatRoomsUpdateResponse = operations['chat___rooms___update']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceJoinRequest = operations['chat___rooms___voice___join']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceJoinResponse = operations['chat___rooms___voice___join']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceKickRequest = operations['chat___rooms___voice___kick']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceMuteRequest = operations['chat___rooms___voice___mute']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceStatesRequest = operations['chat___rooms___voice___states']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceStatesResponse = operations['chat___rooms___voice___states']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomsVoiceStatusRequest = operations['chat___rooms___voice___status']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type ChatRoomVoiceState = components['schemas']['ChatRoomVoiceState'];
 
 // @public (undocumented)
 type Clip = components['schemas']['Clip'];
@@ -1828,6 +1853,13 @@ declare namespace entities {
         ChatRoomsShowResponse,
         ChatRoomsUpdateRequest,
         ChatRoomsUpdateResponse,
+        ChatRoomsVoiceJoinRequest,
+        ChatRoomsVoiceJoinResponse,
+        ChatRoomsVoiceKickRequest,
+        ChatRoomsVoiceMuteRequest,
+        ChatRoomsVoiceStatesRequest,
+        ChatRoomsVoiceStatesResponse,
+        ChatRoomsVoiceStatusRequest,
         ClipsAddNoteRequest,
         ClipsCreateRequest,
         ClipsCreateResponse,
@@ -2302,6 +2334,7 @@ declare namespace entities {
         ChatMessageLiteForRoom,
         ChatRoom,
         ChatRoomInvitation,
+        ChatRoomVoiceState,
         ChatRoomMembership
     }
 }
@@ -3414,7 +3447,7 @@ type RoleLite = components['schemas']['RoleLite'];
 type RolePolicies = components['schemas']['RolePolicies'];
 
 // @public (undocumented)
-export const rolePolicies: readonly ["gtlAvailable", "ltlAvailable", "ignoreServerSilence", "canPublicNote", "canEditNote", "mentionLimit", "canInvite", "inviteLimit", "inviteLimitCycle", "inviteExpirationTime", "canManageCustomEmojis", "canManageAvatarDecorations", "canSearchNotes", "canSearchUsers", "canUseTranslator", "canHideAds", "canCreateChannel", "driveCapacityMb", "maxFileSizeMb", "alwaysMarkNsfw", "canUpdateBioMedia", "pinLimit", "antennaLimit", "wordMuteLimit", "webhookLimit", "clipLimit", "noteEachClipsLimit", "userListLimit", "userEachUserListsLimit", "rateLimitFactor", "avatarDecorationLimit", "canImportAntennas", "canImportBlocking", "canImportFollowing", "canImportMuting", "canImportUserLists", "chatAvailability", "uploadableFileTypes", "noteDraftLimit", "scheduledNoteLimit", "watermarkAvailable"];
+export const rolePolicies: readonly ["gtlAvailable", "ltlAvailable", "ignoreServerSilence", "canPublicNote", "canEditNote", "mentionLimit", "canInvite", "inviteLimit", "inviteLimitCycle", "inviteExpirationTime", "canManageCustomEmojis", "canManageAvatarDecorations", "canSearchNotes", "canSearchUsers", "canUseTranslator", "canHideAds", "canCreateChannel", "driveCapacityMb", "maxFileSizeMb", "alwaysMarkNsfw", "canUpdateBioMedia", "pinLimit", "antennaLimit", "wordMuteLimit", "webhookLimit", "clipLimit", "noteEachClipsLimit", "userListLimit", "userEachUserListsLimit", "rateLimitFactor", "avatarDecorationLimit", "canImportAntennas", "canImportBlocking", "canImportFollowing", "canImportMuting", "canImportUserLists", "canVoiceCall", "canScreenShare", "chatAvailability", "uploadableFileTypes", "noteDraftLimit", "scheduledNoteLimit", "watermarkAvailable"];
 
 // @public (undocumented)
 type RolesListResponse = operations['roles___list']['responses']['200']['content']['application/json'];
@@ -3829,8 +3862,8 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 // Warnings were encountered during analysis:
 //
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:236:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:251:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:238:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:253:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

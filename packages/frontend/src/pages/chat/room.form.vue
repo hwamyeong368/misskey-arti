@@ -24,6 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.buttons">
 			<button class="_button" :class="$style.button" @click="chooseFile"><i class="ti ti-photo-plus"></i></button>
 			<button class="_button" :class="$style.button" @click="insertEmoji"><i class="ti ti-mood-happy"></i></button>
+			<XVoiceCallBarSlot kind="chatForm" :focusWithin="textareaEl"/>
 			<button class="_button" :class="[$style.button, $style.send]" :disabled="!canSend || sending" :title="i18n.ts.send" @click="send">
 				<template v-if="!sending"><i class="ti ti-send"></i></template><template v-if="sending"><MkLoading :em="true"/></template>
 			</button>
@@ -47,6 +48,7 @@ import { prefer } from '@/preferences.js';
 import { Autocomplete } from '@/utility/autocomplete.js';
 import { emojiPicker } from '@/utility/emoji-picker.js';
 import { checkDragDataType, getDragData } from '@/drag-and-drop.js';
+import XVoiceCallBarSlot from '@/ui/_common_/voice-call-bar-slot.vue';
 
 const props = defineProps<{
 	user?: Misskey.entities.UserDetailed | null;
