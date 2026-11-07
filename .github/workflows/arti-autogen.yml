@@ -1,0 +1,75 @@
+# arti: regenerate generated files on GitHub and commit them back to the branch.
+# Use this instead of building on a low-memory machine.
+name: Regenerate autogen files
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to regenerate'
+        required: true
+        default: 'CT'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: arti-autogen-${{ inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.node-version'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm i --frozen-lockfile
+
+      - name: Prepare config
+        run: cp .config/example.yml .config/default.yml
+
+      - name: Build backend
+        run: pnpm --filter backend build
+
+      - name: Generate api.json
+        run: pnpm --filter backend generate-api-json
+
+      - name: Update misskey-js autogen
+        run: |
+          cp packages/backend/built/api.json packages/misskey-js/generator/api.json
+          pnpm --filter misskey-js update-autogen-code
+
+      - name: Build misskey-js
+        run: pnpm --filter misskey-js build
+
+      - name: Update API report
+        run: pnpm --filter misskey-js api
+
+      - name: Generate i18n interface
+        run: pnpm --filter i18n generate
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git commit -m "chore: regenerate autogen files [skip ci]"
+          git push
