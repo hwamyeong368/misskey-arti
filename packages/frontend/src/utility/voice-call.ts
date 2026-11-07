@@ -739,10 +739,19 @@ export async function startScreenShare(): Promise<void> {
 	const startedAt = Date.now();
 	try {
 		await room.localParticipant.setScreenShareEnabled(true, {
-			audio: prefer.s['voiceCall.screenShareAudio'],
+			// Preserve tab audio instead of applying microphone speech processing.
+			audio: prefer.s['voiceCall.screenShareAudio'] ? {
+				channelCount: 2,
+				echoCancellation: false,
+				noiseSuppression: false,
+				autoGainControl: false,
+			} : false,
 			resolution: preset.resolution,
 			contentHint,
 		}, {
+			forceStereo: true,
+			audioPreset: livekit.AudioPresets.musicHighQualityStereo,
+			dtx: false,
 			screenShareEncoding: preset.encoding,
 			// 層は低いものから並べる。一番低い層はプレビュー用
 			screenShareSimulcastLayers: [
@@ -966,6 +975,9 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 	room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
 		if (!isCurrent()) return;
 		if (track.kind === Track.Kind.Audio) {
+			if (publication.source === Track.Source.ScreenShareAudio) {
+				console.info(`[screen-share] received audio channels=${track.mediaStreamTrack.getSettings().channelCount ?? '?'}`);
+			}
 			addRecordingTrack(track.mediaStreamTrack, 'others');
 			window.document.body.appendChild(track.attach());
 			applyVolume(participant);
@@ -1009,7 +1021,10 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 			return;
 		}
 		if (publication.source === Track.Source.ScreenShareAudio) {
-			if (track != null) addRecordingTrack(track.mediaStreamTrack, 'mic');
+			if (track != null) {
+				console.info(`[screen-share] local capture audio channels=${track.mediaStreamTrack.getSettings().channelCount ?? '?'}`);
+				addRecordingTrack(track.mediaStreamTrack, 'mic');
+			}
 			return;
 		}
 		if (publication.source !== Track.Source.ScreenShare || track == null) return;
