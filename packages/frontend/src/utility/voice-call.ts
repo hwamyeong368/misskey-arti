@@ -85,6 +85,7 @@ let recordingContext: AudioContext | null = null;
 let recordingMicBus: GainNode | null = null;
 let recordingOthersBus: GainNode | null = null;
 let recordingMixedDest: MediaStreamAudioDestinationNode | null = null;
+let pendingRecordingUploads: Promise<void>[] = [];
 const recordingSources = new Map<MediaStreamTrack, { source: MediaStreamAudioSourceNode; kind: 'mic' | 'others' }>();
 let recordingCanvas: HTMLCanvasElement | null = null;
 let recordingCanvasStream: MediaStream | null = null;
@@ -102,7 +103,8 @@ function recordingVideoMimeType(): string | undefined {
 }
 
 function addRecordingVideo(track: MediaStreamTrack, screen: boolean): void {
-	if (recordingVideos.has(track)) return;
+	// this runs on every share, not only while recording
+	if (recordingContext == null || recordingVideos.has(track)) return;
 	const element = window.document.createElement('video');
 	element.muted = true;
 	element.playsInline = true;
@@ -212,7 +214,6 @@ async function uploadRecording(blob: Blob, name: string): Promise<void> {
 		if (converted != null) file = converted;
 	} catch { /* keep the WebM when ffmpeg fails */ }
 	// the recording stays in the drive; it is not posted to the room
-	os.toast(i18n.ts._voiceCall.recordingSaved);
 }
 
 function flushRecordingChunk(kind: RecordingPartKind, force: boolean): void {
@@ -222,9 +223,11 @@ function flushRecordingChunk(kind: RecordingPartKind, force: boolean): void {
 	const blob = new Blob(part.chunks, { type: part.recorder.mimeType || 'audio/webm' });
 	part.chunks = [];
 	part.bytes = 0;
-	part.uploads.push(uploadRecording(blob, part.name).catch(err => {
+	const upload = uploadRecording(blob, part.name).catch(err => {
 		console.error(err);
-	}));
+	});
+	part.uploads.push(upload);
+	pendingRecordingUploads.push(upload);
 }
 
 function createRecordingPart(kind: RecordingPartKind, stream: MediaStream, mime: string | undefined, bits: number, name: string): void {
@@ -267,6 +270,13 @@ function stopRecordingVideo(): void {
 
 function teardownRecording(): void {
 	stopRecordingVideo();
+	const uploads = pendingRecordingUploads;
+	pendingRecordingUploads = [];
+	if (uploads.length > 0) {
+		void Promise.allSettled(uploads).then(() => {
+			os.toast(i18n.ts._voiceCall.recordingSaved);
+		});
+	}
 	recordingMicBus = null;
 	recordingOthersBus = null;
 	recordingMixedDest = null;
