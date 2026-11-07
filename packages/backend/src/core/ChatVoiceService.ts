@@ -17,7 +17,8 @@ import type { WebhookEvent } from 'livekit-server-sdk';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository, ChatRoomsRepository, UsersRepository } from '@/models/_.js';
 import type { MiChatRoom } from '@/models/ChatRoom.js';
-import type { MiLocalUser, MiUser } from '@/models/User.js';
+import type { MiMeta } from '@/models/Meta.js';
+import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import type { Packed } from '@/misc/json-schema.js';
 import { bindThis } from '@/decorators.js';
 import { reportedVoiceStatus } from '@/core/voice-participant-status.js';
@@ -30,8 +31,14 @@ import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { RoleService } from '@/core/RoleService.js';
 import type { RolePolicies } from '@/core/RoleService.js';
 import { LoggerService } from '@/core/LoggerService.js';
+import { HostPolicyService } from '@/core/HostPolicyService.js';
 
 const REFRESH_DELAY_MS = 500;
+
+/** arti: whether this server lets its users join voice calls hosted by other servers (stage 2) */
+export function isRemoteVoiceCallEnabled(meta: Pick<MiMeta, 'enableRemoteVoiceCall' | 'federation'>): boolean {
+	return meta.enableRemoteVoiceCall && meta.federation !== 'none';
+}
 
 // LiveKit が再起動して room_finished を送らなかった場合でも表示が残らないよう、
 // スナップショットには寿命を付け、通話中のルームは定期的に読み直す。
@@ -162,10 +169,14 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		@Inject(DI.usersRepository)
 		private usersRepository: UsersRepository,
 
+		@Inject(DI.meta)
+		private meta: MiMeta,
+
 		private liveKitService: LiveKitService,
 		private userEntityService: UserEntityService,
 		private globalEventService: GlobalEventService,
 		private roleService: RoleService,
+		private hostPolicyService: HostPolicyService,
 		private loggerService: LoggerService,
 	) {
 		this.logger = this.loggerService.getLogger('chat-voice');
@@ -184,6 +195,56 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 			canScreenShare,
 		});
 		return { url: this.liveKitService.getPublicUrl(), token, iceServers: null };
+	}
+
+	/**
+	 * arti: issue a join token to a user of another server for a room hosted here.
+	 * Returns 'forbidden' for any room-level refusal so the caller cannot learn
+	 * whether the room exists.
+	 */
+	@bindThis
+	public async issueRemoteJoinToken(user: MiRemoteUser, roomId: MiChatRoom['id'], canScreenShareRequested: boolean): Promise<(JoinCredentials & { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }) | 'forbidden'> {
+		if (!this.liveKitService.isEnabled || !isRemoteVoiceCallEnabled(this.meta)) return 'forbidden';
+		if (user.host == null) return 'forbidden';
+		if (await this.hostPolicyService.isRefusedRemoteHost(user.host)) return 'forbidden';
+
+		const room = await this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: { owner: true } });
+		if (room == null || room.isArchived || room.owner == null || room.owner.host != null) return 'forbidden';
+		if (room.ownerId !== user.id) {
+			const membership = await this.chatRoomMembershipsRepository.findOneBy({ roomId, userId: user.id });
+			if (membership == null) return 'forbidden';
+		}
+
+		const policies = await this.roleService.getUserPolicies(user.id);
+		if (!policies.canVoiceCall || policies.chatAvailability !== 'available') return 'forbidden';
+
+		await this.liveKitService.ensureRoom(room.id, MAX_ROOM_MEMBERS + 1);
+		const token = await this.liveKitService.createJoinToken({
+			roomId: room.id,
+			identity: this.liveKitService.identityOf(user),
+			userId: user.id,
+			canScreenShare: canScreenShareRequested && policies.canScreenShare,
+		});
+		const snapshot = await this.snapshotOf(room.id);
+		return { url: this.liveKitService.getPublicUrl(), token, iceServers: null, participants: snapshot.participants, updatedAt: snapshot.updatedAt };
+	}
+
+	/** Current participant snapshot of a room hosted here, for a remote server. */
+	@bindThis
+	public async snapshotOf(roomId: MiChatRoom['id']): Promise<{ participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }> {
+		const raw = await this.redisClient.get(this.keyOf(roomId));
+		if (raw == null) return { participants: [], updatedAt: Date.now() };
+		const snapshot = JSON.parse(raw) as VoiceSnapshot;
+		return {
+			participants: snapshot.participants.map(p => ({ identity: p.identity, screenSharing: p.screenSharing, ...reportedVoiceStatus(p) })),
+			updatedAt: snapshot.updatedAt,
+		};
+	}
+
+	/** arti: remember the participants of a call hosted by another server. */
+	@bindThis
+	public async storeRemoteSnapshot(room: MiChatRoom, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[], updatedAt: number): Promise<void> {
+		await this.redisClient.set(`chatVoice:remote:${room.id}`, JSON.stringify({ participants, updatedAt }), 'EX', 600);
 	}
 
 	/** 認証したユーザー本人の、接続中のセッションの設定 (マイク・スピーカー) だけを受け付ける */
@@ -509,8 +570,8 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		} else {
 			const user = context.users.value.get(participant.userId);
 			if (user == null || user.isSuspended || user.isDeleted) return 'denied';
-			// 他のサーバーのユーザーは、まだ扱わない
-			if (user.host != null) return 'denied';
+			// arti: remote participants are allowed once remote voice calls are enabled
+			if (user.host != null && !isRemoteVoiceCallEnabled(this.meta)) return 'denied';
 			if (participant.identity !== this.liveKitService.identityOf(user)) return 'denied';
 		}
 

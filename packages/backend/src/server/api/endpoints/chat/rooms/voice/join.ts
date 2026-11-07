@@ -10,6 +10,7 @@ import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository } from '@/models/_.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatVoiceService } from '@/core/ChatVoiceService.js';
+import { RemoteVoiceCallService, RemoteVoiceCallError } from '@/core/RemoteVoiceCallService.js';
 import { LiveKitService } from '@/core/LiveKitService.js';
 import { RoleService } from '@/core/RoleService.js';
 import { ApiError } from '@/server/api/error.js';
@@ -96,6 +97,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 	constructor(
 		private chatService: ChatService,
 		private chatVoiceService: ChatVoiceService,
+		private remoteVoiceCallService: RemoteVoiceCallService,
 		private liveKitService: LiveKitService,
 		private roleService: RoleService,
 
@@ -118,14 +120,23 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
-			// 他のサーバーが持つルームの通話は、まだ扱わない
-			if (room.owner?.host != null || room.isArchived || me.isDeleted) {
+			// arti: a room hosted by another server runs its call there
+			if (room.isArchived || me.isDeleted) {
 				throw new ApiError(meta.errors.voiceCallUnavailable);
 			}
 
 			const policies = await this.roleService.getUserPolicies(me.id);
 			if (!policies.canVoiceCall) {
 				throw new ApiError(meta.errors.voiceCallUnavailable);
+			}
+
+			if (room.owner?.host != null) {
+				try {
+					return await this.remoteVoiceCallService.requestJoin(me, room, room.owner, policies.canScreenShare);
+				} catch (err) {
+					if (err instanceof RemoteVoiceCallError) throw new ApiError(meta.errors.voiceCallUnavailable);
+					throw err;
+				}
 			}
 
 			return await this.chatVoiceService.issueJoinToken(me, room, policies.canScreenShare);

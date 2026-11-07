@@ -81,6 +81,10 @@ import { FanoutTimelineService } from './FanoutTimelineService.js';
 import { ChannelFollowingService } from './ChannelFollowingService.js';
 import { ChatService } from './ChatService.js';
 import { ChatVoiceService } from './ChatVoiceService.js';
+import { HostPolicyService } from './HostPolicyService.js';
+import { CloudflareTurnService } from './CloudflareTurnService.js';
+import { RemoteVoiceCallService } from './RemoteVoiceCallService.js';
+import { ApSignedRequestVerifierService } from './activitypub/ApSignedRequestVerifierService.js';
 import { LiveKitService } from './LiveKitService.js';
 import { RegistryApiService } from './RegistryApiService.js';
 import { ReversiService } from './ReversiService.js';
@@ -239,6 +243,10 @@ const $ChannelFollowingService: Provider = { provide: 'ChannelFollowingService',
 const $ChannelMutingService: Provider = { provide: 'ChannelMutingService', useExisting: ChannelMutingService };
 const $ChatService: Provider = { provide: 'ChatService', useExisting: ChatService };
 const $ChatVoiceService: Provider = { provide: 'ChatVoiceService', useExisting: ChatVoiceService };
+const $HostPolicyService: Provider = { provide: 'HostPolicyService', useExisting: HostPolicyService };
+const $CloudflareTurnService: Provider = { provide: 'CloudflareTurnService', useExisting: CloudflareTurnService };
+const $RemoteVoiceCallService: Provider = { provide: 'RemoteVoiceCallService', useExisting: RemoteVoiceCallService };
+const $ApSignedRequestVerifierService: Provider = { provide: 'ApSignedRequestVerifierService', useExisting: ApSignedRequestVerifierService };
 const $LiveKitService: Provider = { provide: 'LiveKitService', useExisting: LiveKitService };
 const $RegistryApiService: Provider = { provide: 'RegistryApiService', useExisting: RegistryApiService };
 const $ReversiService: Provider = { provide: 'ReversiService', useExisting: ReversiService };
@@ -398,6 +406,10 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChannelMutingService,
 		ChatService,
 		ChatVoiceService,
+		HostPolicyService,
+		CloudflareTurnService,
+		RemoteVoiceCallService,
+		ApSignedRequestVerifierService,
 		LiveKitService,
 		RegistryApiService,
 		ReversiService,
@@ -555,6 +567,10 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$ChannelMutingService,
 		$ChatService,
 		$ChatVoiceService,
+		$HostPolicyService,
+		$CloudflareTurnService,
+		$RemoteVoiceCallService,
+		$ApSignedRequestVerifierService,
 		$LiveKitService,
 		$RegistryApiService,
 		$ReversiService,
@@ -712,6 +728,10 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChannelMutingService,
 		ChatService,
 		ChatVoiceService,
+		HostPolicyService,
+		CloudflareTurnService,
+		RemoteVoiceCallService,
+		ApSignedRequestVerifierService,
 		LiveKitService,
 		RegistryApiService,
 		ReversiService,
@@ -867,6 +887,10 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$ChannelMutingService,
 		$ChatService,
 		$ChatVoiceService,
+		$HostPolicyService,
+		$CloudflareTurnService,
+		$RemoteVoiceCallService,
+		$ApSignedRequestVerifierService,
 		$LiveKitService,
 		$RegistryApiService,
 		$ReversiService,

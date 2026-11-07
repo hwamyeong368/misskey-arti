@@ -6,14 +6,18 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 import type * as stream from 'node:stream';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { bindThis } from '@/decorators.js';
+import { DI } from '@/di-symbols.js';
+import type { Config } from '@/config.js';
 import { LiveKitService } from '@/core/LiveKitService.js';
 import { ChatVoiceService } from '@/core/ChatVoiceService.js';
+import { ApSignedRequestVerifierService } from '@/core/activitypub/ApSignedRequestVerifierService.js';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
 const PREFIX = '/livekit';
 const MAX_PRE_UPGRADE_BYTES = 64 * 1024;
+const FEDERATION_TOKEN_BODY_LIMIT = 16 * 1024;
 
 // LiveKit のシグナリングに必要なヘッダーだけを中継する (Cookie などは渡さない)
 const FORWARDED_UPGRADE_HEADERS = [
@@ -41,8 +45,12 @@ export class LiveKitServerService {
 	public upstreamTimeoutMs = 10_000;
 
 	constructor(
+		@Inject(DI.config)
+		private config: Config,
+
 		private liveKitService: LiveKitService,
 		private chatVoiceService: ChatVoiceService,
+		private apSignedRequestVerifierService: ApSignedRequestVerifierService,
 	) {
 	}
 
@@ -71,6 +79,47 @@ export class LiveKitServerService {
 
 			this.chatVoiceService.handleWebhook(event);
 			return reply.code(204).send();
+		});
+
+		// arti: a user of another server asks for a token to join a call in a room hosted here.
+		// 404 means "voice calls are not available here" and is the only error the other server remembers.
+		fastify.post('/federation/token', { bodyLimit: FEDERATION_TOKEN_BODY_LIMIT }, async (request, reply) => {
+			try {
+				const rawBody = typeof request.body === 'string' ? request.body : '';
+				const user = await this.apSignedRequestVerifierService.verify({ method: request.method, url: request.url, headers: request.headers }, rawBody);
+				if (user == null) return reply.code(401).send();
+
+				const body = parseTokenRequest(rawBody);
+				if (body == null) return reply.code(400).send();
+
+				const roomId = this.localRoomIdOf(body.room);
+				const result = roomId != null ? await this.chatVoiceService.issueRemoteJoinToken(user, roomId, body.canScreenShare) : 'forbidden';
+				if (result === 'forbidden') return reply.code(403).send();
+
+				const { url, token, iceServers, participants, updatedAt } = result;
+				return reply.code(200).send({ url, token, iceServers, participants, updatedAt });
+			} catch {
+				return reply.code(500).send();
+			}
+		});
+
+		fastify.post('/federation/status', { bodyLimit: FEDERATION_TOKEN_BODY_LIMIT }, async (request, reply) => {
+			try {
+				const rawBody = typeof request.body === 'string' ? request.body : '';
+				const user = await this.apSignedRequestVerifierService.verify({ method: request.method, url: request.url, headers: request.headers }, rawBody);
+				if (user == null) return reply.code(401).send();
+
+				const body: unknown = JSON.parse(rawBody);
+				if (body == null || typeof body !== 'object') return reply.code(400).send();
+				const { room, sessionId, micMuted, deafened } = body as Record<string, unknown>;
+				if (typeof room !== 'string' || typeof sessionId !== 'string' || sessionId.length > 128 || typeof micMuted !== 'boolean' || typeof deafened !== 'boolean') return reply.code(400).send();
+
+				const roomId = this.localRoomIdOf(room);
+				if (roomId == null || !await this.chatVoiceService.reportStatus(user, roomId, sessionId, { micMuted, deafened })) return reply.code(403).send();
+				return reply.code(200).send({});
+			} catch (err) {
+				return reply.code(err instanceof SyntaxError ? 400 : 500).send();
+			}
 		});
 
 		fastify.get('/rtc/*', async (request, reply) => {
@@ -219,6 +268,18 @@ export class LiveKitServerService {
 	 * 中継先を LiveKit の /rtc 配下に限る。
 	 * `/livekit//other.host/...` のような経路は URL として別ホストに解決されるので弾く
 	 */
+	/** arti: the local room id when the given room URL points at this server. */
+	private localRoomIdOf(roomUrl: string): string | null {
+		try {
+			const url = new URL(roomUrl);
+			if (url.origin !== this.config.url) return null;
+			const match = url.pathname.match(/^\/chat\/rooms\/([^/]+)$/);
+			return match?.[1] ?? null;
+		} catch {
+			return null;
+		}
+	}
+
 	private targetOf(url: string): URL | null {
 		const path = stripPrefix(url).split('?')[0];
 		// URL と上流ルーターの正規化の差で RTC 配下を抜けないよう、区切り文字と二重エンコードを断る。
@@ -257,4 +318,17 @@ function rawHeaders(response: http.IncomingMessage, dropped: Set<string> = new S
 		result += `${response.rawHeaders[i]}: ${response.rawHeaders[i + 1]}\r\n`;
 	}
 	return result;
+}
+
+/** arti: parse the JSON body of a federation token request. */
+function parseTokenRequest(rawBody: string): { room: string; canScreenShare: boolean } | null {
+	try {
+		const body: unknown = JSON.parse(rawBody);
+		if (body == null || typeof body !== 'object') return null;
+		const { room, canScreenShare } = body as Record<string, unknown>;
+		if (typeof room !== 'string' || typeof canScreenShare !== 'boolean') return null;
+		return { room, canScreenShare };
+	} catch {
+		return null;
+	}
 }
