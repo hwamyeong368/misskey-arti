@@ -86,6 +86,7 @@ let recordingMicBus: GainNode | null = null;
 let recordingOthersBus: GainNode | null = null;
 let recordingMixedDest: MediaStreamAudioDestinationNode | null = null;
 let pendingRecordingUploads: Promise<void>[] = [];
+let recordingRawMicStream: MediaStream | null = null;
 const recordingSources = new Map<MediaStreamTrack, { source: MediaStreamAudioSourceNode; kind: 'mic' | 'others' }>();
 let recordingCanvas: HTMLCanvasElement | null = null;
 let recordingCanvasStream: MediaStream | null = null;
@@ -181,7 +182,7 @@ function addRecordingTrack(track: MediaStreamTrack, kind: 'mic' | 'others'): voi
 	if (recordingContext == null) return;
 	const bus = kind === 'mic' ? recordingMicBus : recordingOthersBus;
 	if (bus == null || recordingSources.has(track)) return;
-	console.info('[recording] track', track.kind, 'channels=' + (track.getSettings().channelCount ?? '?'));
+	console.info(`[recording] ${kind} track channels=${track.getSettings().channelCount ?? '?'}`);
 	try {
 		const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
 		source.connect(bus);
@@ -284,6 +285,8 @@ function teardownRecording(): void {
 	recordingMicBus = null;
 	recordingOthersBus = null;
 	recordingMixedDest = null;
+	recordingRawMicStream?.getTracks().forEach(track => track.stop());
+	recordingRawMicStream = null;
 	recordingContext?.close().catch(() => {});
 	recordingContext = null;
 	recordingSources.clear();
@@ -475,9 +478,26 @@ export async function startRecording(): Promise<void> {
 
 	const lk = livekit;
 	let hasVideo = false;
+	// capture the microphone without the call's voice processing (echo cancellation, noise
+	// suppression, auto gain), which makes music and quiet voices sound thin
+	try {
+		const raw = await navigator.mediaDevices.getUserMedia({
+			audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+		});
+		recordingRawMicStream = raw;
+		const track = raw.getAudioTracks()[0];
+		if (track != null) {
+			track.enabled = state.micEnabled;
+			addRecordingTrack(track, 'mic');
+		}
+	} catch {
+		// fall back to the microphone of the call
+		if (lk != null) {
+			const mic = room.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.track;
+			if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack, 'mic');
+		}
+	}
 	if (lk != null) {
-		const mic = room.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.track;
-		if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack, 'mic');
 		// my own tab audio is not played to my speakers, so it only reaches the recording here
 		const shareAudio = room.localParticipant.getTrackPublication(lk.Track.Source.ScreenShareAudio)?.track;
 		if (shareAudio?.mediaStreamTrack != null) addRecordingTrack(shareAudio.mediaStreamTrack, 'others');
@@ -608,6 +628,9 @@ export async function leaveVoiceCall(): Promise<void> {
 export async function setMicEnabled(enabled: boolean): Promise<void> {
 	const room = current;
 	if (room == null) return;
+	if (recordingRawMicStream != null) {
+		for (const track of recordingRawMicStream.getAudioTracks()) track.enabled = enabled;
+	}
 	prefer.commit('voiceCall.micEnabled', enabled);
 	if (enabled) {
 		// スピーカーを切ったままマイクだけを入れると、聞こえないまま話すことになる。マイクが入ったらスピーカーも戻す。
