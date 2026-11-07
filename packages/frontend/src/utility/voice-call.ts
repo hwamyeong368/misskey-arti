@@ -79,10 +79,70 @@ const recordingSources = new Map<MediaStreamTrack, MediaStreamAudioSourceNode>()
 let recordingChunks: Blob[] = [];
 let recordingBytes = 0;
 let recordingUploads: Promise<void>[] = [];
+// arti: video (screen share or participant tiles) composited next to the voices
+let recordingCanvas: HTMLCanvasElement | null = null;
+let recordingCanvasStream: MediaStream | null = null;
+let recordingDrawTimer: number | null = null;
+const recordingVideos = new Map<MediaStreamTrack, { element: HTMLVideoElement; screen: boolean }>();
 
 function recordingMimeType(): string | undefined {
 	if (typeof MediaRecorder === 'undefined') return undefined;
 	return ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type));
+}
+
+function recordingVideoMimeType(): string | undefined {
+	if (typeof MediaRecorder === 'undefined') return undefined;
+	return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
+}
+
+function addRecordingVideo(track: MediaStreamTrack, screen: boolean): void {
+	if (recordingCanvas == null || recordingVideos.has(track)) return;
+	const element = window.document.createElement('video');
+	element.muted = true;
+	element.playsInline = true;
+	element.srcObject = new MediaStream([track]);
+	void element.play().catch(() => {});
+	recordingVideos.set(track, { element, screen });
+}
+
+function removeRecordingVideo(track: MediaStreamTrack): void {
+	const entry = recordingVideos.get(track);
+	if (entry == null) return;
+	entry.element.pause();
+	entry.element.srcObject = null;
+	recordingVideos.delete(track);
+}
+
+function drawRecordingFrame(): void {
+	const canvas = recordingCanvas;
+	const ctx = canvas?.getContext('2d');
+	if (canvas == null || ctx == null) return;
+	ctx.fillStyle = '#111';
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	const ready = [...recordingVideos.values()].filter(v => v.element.readyState >= 2);
+	if (ready.length === 0) return;
+
+	const drawFit = (video: HTMLVideoElement, x: number, y: number, w: number, h: number) => {
+		const vw = video.videoWidth || 16;
+		const vh = video.videoHeight || 9;
+		const scale = Math.min(w / vw, h / vh);
+		const dw = vw * scale;
+		const dh = vh * scale;
+		ctx.drawImage(video, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+	};
+
+	// a shared screen gets the whole frame; otherwise lay the cameras out in a grid
+	const screen = ready.find(v => v.screen);
+	if (screen != null) {
+		drawFit(screen.element, 0, 0, canvas.width, canvas.height);
+		return;
+	}
+	const cols = ready.length <= 1 ? 1 : ready.length <= 4 ? 2 : 3;
+	const rows = Math.ceil(ready.length / cols);
+	const cw = canvas.width / cols;
+	const ch = canvas.height / rows;
+	ready.forEach((entry, i) => drawFit(entry.element, (i % cols) * cw, Math.floor(i / cols) * ch, cw, ch));
 }
 
 function addRecordingTrack(track: MediaStreamTrack): void {
@@ -116,11 +176,13 @@ async function uploadRecording(blob: Blob): Promise<void> {
 	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'omit' });
 	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
 	let file = await res.json() as Misskey.entities.DriveFile;
-	// MP3 plays in more players than WebM/Opus
-	try {
-		const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
-		if (converted != null) file = converted;
-	} catch { /* keep the WebM when ffmpeg fails */ }
+	// MP3 plays in more players than WebM/Opus (audio recordings only)
+	if (blob.type.startsWith('audio/')) {
+		try {
+			const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
+			if (converted != null) file = converted;
+		} catch { /* keep the WebM when ffmpeg fails */ }
+	}
 	await misskeyApi('chat/messages/create-to-room', { toRoomId: roomId, fileId: file.id });
 }
 
@@ -301,9 +363,23 @@ export async function startRecording(): Promise<void> {
 	recordingBytes = 0;
 	recordingUploads = [];
 
-	const mimeType = recordingMimeType();
-	const rec = new MediaRecorder(destination.stream, {
+	// arti: composite the shared screen / participant cameras into the recording
+	const canvas = window.document.createElement('canvas');
+	canvas.width = 1280;
+	canvas.height = 720;
+	recordingCanvas = canvas;
+	recordingCanvasStream = canvas.captureStream(15);
+	recordingVideos.clear();
+	recordingDrawTimer = window.setInterval(drawRecordingFrame, 66);
+	drawRecordingFrame();
+
+	const mimeType = recordingVideoMimeType();
+	const rec = new MediaRecorder(new MediaStream([
+		...destination.stream.getAudioTracks(),
+		...recordingCanvasStream.getVideoTracks(),
+	]), {
 		...(mimeType != null ? { mimeType } : {}),
+		videoBitsPerSecond: 2_500_000,
 		audioBitsPerSecond: 64_000,
 	});
 	// addRecordingTrack only works once the recorder exists
@@ -315,10 +391,14 @@ export async function startRecording(): Promise<void> {
 		if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack);
 		for (const participant of room.remoteParticipants.values()) {
 			for (const publication of participant.trackPublications.values()) {
-				if (publication.kind !== lk.Track.Kind.Audio) continue;
 				const track = publication.track?.mediaStreamTrack;
-				if (track != null) addRecordingTrack(track);
+				if (track == null) continue;
+				if (publication.kind === lk.Track.Kind.Audio) addRecordingTrack(track);
+				else if (publication.kind === lk.Track.Kind.Video) addRecordingVideo(track, publication.source === lk.Track.Source.ScreenShare);
 			}
+		}
+		for (const track of screenShareTracks.values()) {
+			if (track.mediaStreamTrack != null) addRecordingVideo(track.mediaStreamTrack, true);
 		}
 	}
 
@@ -333,6 +413,14 @@ export async function startRecording(): Promise<void> {
 	};
 	rec.onstop = () => {
 		flushRecordingChunk(true);
+		if (recordingDrawTimer != null) {
+			window.clearInterval(recordingDrawTimer);
+			recordingDrawTimer = null;
+		}
+		for (const track of [...recordingVideos.keys()]) removeRecordingVideo(track);
+		recordingCanvas = null;
+		recordingCanvasStream?.getTracks().forEach(track => track.stop());
+		recordingCanvasStream = null;
 		recordingContext?.close().catch(() => {});
 		recordingContext = null;
 		recordingDestination = null;
@@ -778,6 +866,8 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 			addRecordingTrack(track.mediaStreamTrack);
 			window.document.body.appendChild(track.attach());
 			applyVolume(participant);
+		} else if (track.kind === Track.Kind.Video) {
+			addRecordingVideo(track.mediaStreamTrack, publication.source === Track.Source.ScreenShare);
 		} else if (publication.source === Track.Source.ScreenShare) {
 			screenShareTracks.set(participant.identity, track);
 			for (const view of screenShareViews.get(participant.identity) ?? []) track.attach(view.element);
@@ -788,6 +878,8 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 		if (track.kind === Track.Kind.Audio) {
 			removeRecordingTrack(track.mediaStreamTrack);
 			for (const element of track.detach()) element.remove();
+		} else if (track.kind === Track.Kind.Video) {
+			removeRecordingVideo(track.mediaStreamTrack);
 		} else if (publication.source === Track.Source.ScreenShare) {
 			for (const view of screenShareViews.get(participant.identity) ?? []) track.detach(view.element);
 			screenShareTracks.delete(participant.identity);
