@@ -296,6 +296,14 @@ export async function startRecording(): Promise<void> {
 	recordingBytes = 0;
 	recordingUploads = [];
 
+	const mimeType = recordingMimeType();
+	const rec = new MediaRecorder(destination.stream, {
+		...(mimeType != null ? { mimeType } : {}),
+		audioBitsPerSecond: 64_000,
+	});
+	// addRecordingTrack only works once the recorder exists
+	recorder = rec;
+
 	const lk = livekit;
 	if (lk != null) {
 		const mic = room.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.track;
@@ -309,12 +317,9 @@ export async function startRecording(): Promise<void> {
 		}
 	}
 
-	const mimeType = recordingMimeType();
-	const rec = new MediaRecorder(destination.stream, {
-		...(mimeType != null ? { mimeType } : {}),
-		audioBitsPerSecond: 64_000,
-	});
-	recorder = rec;
+	// a suspended AudioContext produces no frames, so the recorder would stay empty
+	await context.resume().catch(() => {});
+
 	rec.ondataavailable = (ev) => {
 		if (ev.data.size === 0) return;
 		recordingChunks.push(ev.data);
@@ -343,6 +348,7 @@ export function stopRecording(): void {
 	state.recording = false;
 	state.recordingStartedAt = null;
 	if (current != null) reportStatus(current, true);
+	try { rec.requestData(); } catch { /* not recording yet */ }
 	rec.stop();
 	void Promise.allSettled(recordingUploads);
 }
