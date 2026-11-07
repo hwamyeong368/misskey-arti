@@ -123,6 +123,8 @@ type AdmissionContext = {
 	users: Read<Map<MiUser['id'], MiUser>>;
 	memberIds: Read<Set<MiUser['id']>>;
 	policies: Map<MiUser['id'], Read<RolePolicies>>;
+	/** arti: whether each remote participant's server is refused (blocked, suspended, not federated). Missing = could not decide */
+	refusedHosts: Map<string, boolean>;
 	errors: unknown[];
 };
 
@@ -207,16 +209,19 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 	public async issueRemoteJoinToken(user: MiRemoteUser, roomId: MiChatRoom['id'], canScreenShareRequested: boolean): Promise<(JoinCredentials & { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }) | 'forbidden'> {
 		if (!this.liveKitService.isEnabled || !isRemoteVoiceCallEnabled(this.meta)) return 'forbidden';
 		if (user.host == null) return 'forbidden';
-		if (await this.hostPolicyService.isRefusedRemoteHost(user.host)) return 'forbidden';
 
-		const room = await this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: { owner: true } });
+		// Read everything before deciding, so the answer and its timing do not reveal whether the room exists
+		const [room, isMember, isRefusedHost, policies] = await Promise.all([
+			this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: { owner: true } }),
+			this.chatRoomMembershipsRepository.exists({ where: { roomId, userId: user.id } }),
+			this.hostPolicyService.isRefusedRemoteHost(user.host),
+			this.roleService.getUserPolicies(user.id),
+		]);
+
 		if (room == null || room.isArchived || room.owner == null || room.owner.host != null) return 'forbidden';
-		if (room.ownerId !== user.id) {
-			const membership = await this.chatRoomMembershipsRepository.findOneBy({ roomId, userId: user.id });
-			if (membership == null) return 'forbidden';
-		}
-
-		const policies = await this.roleService.getUserPolicies(user.id);
+		if (user.isSuspended || user.isDeleted) return 'forbidden';
+		if (isRefusedHost) return 'forbidden';
+		if (!isMember) return 'forbidden';
 		if (!policies.canVoiceCall || policies.chatAvailability !== 'available') return 'forbidden';
 
 		await this.liveKitService.ensureRoom(room.id, MAX_ROOM_MEMBERS + 1);
@@ -543,7 +548,17 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 			Promise.all(ids.map(async userId => [userId, await read(() => this.roleService.getUserPolicies(userId))] as const)),
 		]);
 
-		return { room, users, memberIds, policies: new Map(policies), errors };
+		// arti: decide once per remote host whether this server refuses it
+		const refusedHosts = new Map<string, boolean>();
+		if (users.ok) {
+			const hosts = [...new Set([...users.value.values()].flatMap(user => user.host ?? []))];
+			await Promise.all(hosts.map(async host => {
+				const refused = await read(() => this.hostPolicyService.isRefusedRemoteHost(host));
+				if (refused.ok) refusedHosts.set(host, refused.value);
+			}));
+		}
+
+		return { room, users, memberIds, policies: new Map(policies), refusedHosts, errors };
 	}
 
 	/**
@@ -571,8 +586,14 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		} else {
 			const user = context.users.value.get(participant.userId);
 			if (user == null || user.isSuspended || user.isDeleted) return 'denied';
-			// arti: remote participants are allowed once remote voice calls are enabled
-			if (user.host != null && !isRemoteVoiceCallEnabled(this.meta)) return 'denied';
+			// arti: remote participants are allowed once remote voice calls are enabled,
+			// unless their server is refused (blocked, suspended, or not federated)
+			if (user.host != null) {
+				if (!isRemoteVoiceCallEnabled(this.meta) || user.uri == null) return 'denied';
+				const refused = context.refusedHosts.get(user.host);
+				if (refused === true) return 'denied';
+				if (refused == null) unverified = true;
+			}
 			if (participant.identity !== this.liveKitService.identityOf(user)) return 'denied';
 		}
 

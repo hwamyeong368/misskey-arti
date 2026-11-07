@@ -13,11 +13,19 @@ import type { Config } from '@/config.js';
 import { LiveKitService } from '@/core/LiveKitService.js';
 import { ChatVoiceService } from '@/core/ChatVoiceService.js';
 import { ApSignedRequestVerifierService } from '@/core/activitypub/ApSignedRequestVerifierService.js';
+import { RateLimiterService } from '@/server/api/RateLimiterService.js';
+import { getIpHash } from '@/misc/get-ip-hash.js';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
 const PREFIX = '/livekit';
 const MAX_PRE_UPGRADE_BYTES = 64 * 1024;
 const FEDERATION_TOKEN_BODY_LIMIT = 16 * 1024;
+// arti: limits for requests from other servers (same values as choco)
+const FEDERATION_TOKEN_IP_LIMIT = { key: 'voiceFederationTokenIp', duration: 60 * 1000, max: 60 };
+const FEDERATION_TOKEN_USER_LIMIT = { key: 'voiceFederationToken', duration: 60 * 1000, max: 30 };
+// one server sends status reports for all of its users from the same IP
+const FEDERATION_STATUS_IP_LIMIT = { key: 'voiceFederationStatusIp', duration: 60 * 1000, max: 600 };
+const FEDERATION_STATUS_USER_LIMIT = { key: 'voiceFederationStatus', duration: 60 * 1000, max: 30 };
 
 // LiveKit のシグナリングに必要なヘッダーだけを中継する (Cookie などは渡さない)
 const FORWARDED_UPGRADE_HEADERS = [
@@ -51,6 +59,7 @@ export class LiveKitServerService {
 		private liveKitService: LiveKitService,
 		private chatVoiceService: ChatVoiceService,
 		private apSignedRequestVerifierService: ApSignedRequestVerifierService,
+		private rateLimiterService: RateLimiterService,
 	) {
 	}
 
@@ -85,9 +94,13 @@ export class LiveKitServerService {
 		// 404 means "voice calls are not available here" and is the only error the other server remembers.
 		fastify.post('/federation/token', { bodyLimit: FEDERATION_TOKEN_BODY_LIMIT }, async (request, reply) => {
 			try {
+				if (this.config.enableIpRateLimit && await this.rateLimiterService.limit(FEDERATION_TOKEN_IP_LIMIT, getIpHash(request.ip)) != null) return reply.code(429).send();
+
 				const rawBody = typeof request.body === 'string' ? request.body : '';
 				const user = await this.apSignedRequestVerifierService.verify({ method: request.method, url: request.url, headers: request.headers }, rawBody);
 				if (user == null) return reply.code(401).send();
+
+				if (await this.rateLimiterService.limit(FEDERATION_TOKEN_USER_LIMIT, user.id) != null) return reply.code(429).send();
 
 				const body = parseTokenRequest(rawBody);
 				if (body == null) return reply.code(400).send();
@@ -105,9 +118,13 @@ export class LiveKitServerService {
 
 		fastify.post('/federation/status', { bodyLimit: FEDERATION_TOKEN_BODY_LIMIT }, async (request, reply) => {
 			try {
+				if (this.config.enableIpRateLimit && await this.rateLimiterService.limit(FEDERATION_STATUS_IP_LIMIT, getIpHash(request.ip)) != null) return reply.code(429).send();
+
 				const rawBody = typeof request.body === 'string' ? request.body : '';
 				const user = await this.apSignedRequestVerifierService.verify({ method: request.method, url: request.url, headers: request.headers }, rawBody);
 				if (user == null) return reply.code(401).send();
+
+				if (await this.rateLimiterService.limit(FEDERATION_STATUS_USER_LIMIT, user.id) != null) return reply.code(429).send();
 
 				const body: unknown = JSON.parse(rawBody);
 				if (body == null || typeof body !== 'object') return reply.code(400).send();
