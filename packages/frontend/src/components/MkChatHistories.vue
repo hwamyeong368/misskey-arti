@@ -41,6 +41,7 @@ import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
 import { useChatRoomVoiceStates } from '@/composables/use-chat-room-voice-states.js';
+import { isChatRoomVoiceAvailable } from '@/utility/chat-room-voice-availability.js';
 
 const $i = ensureSignin();
 
@@ -51,7 +52,7 @@ const history = ref<{
 	isMe: boolean;
 }[]>([]);
 
-const roomIds = computed(() => history.value.map(item => item.message.toRoomId).filter((id): id is string => id != null));
+const roomIds = computed(() => history.value.flatMap(item => isChatRoomVoiceAvailable(item.message.toRoom, $i.policies.canVoiceCall) ? [item.message.toRoomId!] : []));
 const voiceStates = useChatRoomVoiceStates(roomIds);
 
 function inCall(roomId: string | null | undefined): number {
