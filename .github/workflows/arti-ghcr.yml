@@ -6,7 +6,7 @@ name: Publish Docker image (Arti, ghcr)
 on:
   push:
     branches:
-      - bscone
+      - arti
   workflow_dispatch:
 
 permissions:
