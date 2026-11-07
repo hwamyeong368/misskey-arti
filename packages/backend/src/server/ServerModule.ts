@@ -22,6 +22,7 @@ import { SigninApiService } from './api/SigninApiService.js';
 import { SigninService } from './api/SigninService.js';
 import { SignupApiService } from './api/SignupApiService.js';
 import { StreamingApiServerService } from './api/StreamingApiServerService.js';
+import { LiveKitServerService } from './LiveKitServerService.js';
 import { OpenApiServerService } from './api/openapi/OpenApiServerService.js';
 import { ClientServerService } from './web/ClientServerService.js';
 import { HtmlTemplateService } from './web/HtmlTemplateService.js';
@@ -82,6 +83,7 @@ import { SigninWithPasskeyApiService } from './api/SigninWithPasskeyApiService.j
 		SigninService,
 		SignupApiService,
 		StreamingApiServerService,
+		LiveKitServerService,
 		MainChannel,
 		AdminChannel,
 		AntennaChannel,

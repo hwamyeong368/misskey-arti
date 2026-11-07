@@ -546,6 +546,52 @@ export const PREF_DEF = definePreferences({
 		default: false,
 	},
 
+	'voiceCall.inputDeviceId': {
+		default: null as string | null,
+	},
+	'voiceCall.outputDeviceId': {
+		default: null as string | null,
+	},
+	'voiceCall.echoCancellation': {
+		default: true,
+	},
+	'voiceCall.noiseSuppression': {
+		default: true,
+	},
+	'voiceCall.autoGainControl': {
+		default: true,
+	},
+	// 最後に自分で選んだマイクの入/切 (参加前の選択も、通話中の切り替えも)。次に通話に入るときもこれで入る
+	'voiceCall.micEnabled': {
+		default: true,
+	},
+	// 参加者ごとの音量 (identity ごと)。声と共有画面の音声は別々に持つ
+	'voiceCall.participantVolumes': {
+		default: {} as Record<string, number>,
+	},
+	'voiceCall.screenShareVolumes': {
+		default: {} as Record<string, number>,
+	},
+	'voiceCall.screenShareVolumesMigrated': {
+		default: false,
+	},
+	'voiceCall.screenShareQuality': {
+		default: 'sharp' as 'sharp' | 'smooth' | 'high',
+	},
+	'voiceCall.screenShareAudio': {
+		default: true,
+	},
+	// IP アドレスを見せることへの同意なので、アカウントごとに持つ
+	'voiceCall.acknowledgedRemoteHosts': {
+		accountDependent: true,
+		default: [] as string[],
+	},
+	// 広いルーム画面で通話とチャットを横に並べるとき、チャットを置く側
+	'voiceCall.stageChatSide': {
+		accountDependent: true,
+		default: 'right' as 'right' | 'left',
+	},
+
 	'game.dropAndFusion': {
 		default: {
 			bgmVolume: 0.25,

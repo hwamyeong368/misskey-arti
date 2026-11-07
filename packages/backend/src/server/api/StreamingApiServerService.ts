@@ -12,6 +12,7 @@ import type { MiAccessToken } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import type { MiLocalUser } from '@/models/User.js';
 import { UserService } from '@/core/UserService.js';
+import { LiveKitServerService } from '@/server/LiveKitServerService.js';
 import { AuthenticateService, AuthenticationError } from './AuthenticateService.js';
 import MainStreamConnection, { ConnectionRequest } from './stream/Connection.js';
 import type * as http from 'node:http';
@@ -31,6 +32,7 @@ export class StreamingApiServerService {
 		private moduleRef: ModuleRef,
 		private authenticateService: AuthenticateService,
 		private usersService: UserService,
+		private liveKitServerService: LiveKitServerService,
 	) {
 	}
 
@@ -46,6 +48,12 @@ export class StreamingApiServerService {
 			if (request.url == null) {
 				socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
 				socket.destroy();
+				return;
+			}
+
+			// arti: LiveKit signaling is relayed as-is to the LiveKit server (from choco)
+			if (this.liveKitServerService.handles(request)) {
+				this.liveKitServerService.handleUpgrade(request, socket, head);
 				return;
 			}
 

@@ -7,6 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <PageWithHeader v-model:tab="tab" :reversed="tab === 'chat'" :tabs="headerTabs" :actions="headerActions">
 	<div v-if="tab === 'chat'" class="_spacer" style="--MI_SPACER-w: 700px;">
 		<div class="_gaps">
+			<XVoiceBanner :call="voiceCall"/>
 			<div v-if="initializing">
 				<MkLoading/>
 			</div>
@@ -96,6 +97,8 @@ import XForm from './room.form.vue';
 import XSearch from './room.search.vue';
 import XMembers from './room.members.vue';
 import XInfo from './room.info.vue';
+import XVoiceBanner from './room.voice.banner.vue';
+import { useChatRoomVoiceCall } from '@/composables/use-chat-room-voice-call.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { PageHeaderItem } from '@/types/page-header.js';
 import * as os from '@/os.js';
@@ -134,6 +137,7 @@ const messages = ref<NormalizedChatMessage[]>([]);
 const canFetchMore = ref(false);
 const user = ref<Misskey.entities.UserDetailed | null>(null);
 const room = ref<Misskey.entities.ChatRoom | null>(null);
+const voiceCall = useChatRoomVoiceCall(room);
 const connection = ref<Misskey.IChannelConnection<Misskey.Channels['chatUser']> | Misskey.IChannelConnection<Misskey.Channels['chatRoom']> | null>(null);
 const showIndicator = ref(false);
 const timelineEl = useTemplateRef('timelineEl');

@@ -169,6 +169,8 @@ export class MetaEntityService {
 				objectStorage: instance.useObjectStorage,
 				serviceWorker: instance.enableServiceWorker,
 				miauth: true,
+				// arti: voice calls in chat rooms (from choco)
+				voiceCall: this.config.voiceCall?.livekit != null,
 			},
 		};
 

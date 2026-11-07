@@ -39,6 +39,9 @@ export type RolePolicies = {
 	ignoreServerSilence: boolean;
 	canPublicNote: boolean;
 	canEditNote: boolean;
+	// arti: voice calls in chat rooms (from choco)
+	canVoiceCall: boolean;
+	canScreenShare: boolean;
 	mentionLimit: number;
 	canInvite: boolean;
 	inviteLimit: number;
@@ -83,6 +86,8 @@ export const DEFAULT_POLICIES: RolePolicies = {
 	ignoreServerSilence: false,
 	canPublicNote: true,
 	canEditNote: true,
+	canVoiceCall: true,
+	canScreenShare: true,
 	mentionLimit: 20,
 	canInvite: false,
 	inviteLimit: 0,
@@ -413,6 +418,8 @@ export class RoleService implements OnApplicationShutdown, OnModuleInit {
 			ignoreServerSilence: calc('ignoreServerSilence', vs => vs.some(v => v === true)),
 			canPublicNote: calc('canPublicNote', vs => vs.some(v => v === true)),
 			canEditNote: calc('canEditNote', vs => vs.some(v => v === true)),
+			canVoiceCall: calc('canVoiceCall', vs => vs.some(v => v === true)),
+			canScreenShare: calc('canScreenShare', vs => vs.some(v => v === true)),
 			mentionLimit: calc('mentionLimit', vs => Math.max(...vs)),
 			canInvite: calc('canInvite', vs => vs.some(v => v === true)),
 			inviteLimit: calc('inviteLimit', vs => Math.max(...vs)),

@@ -72,6 +72,7 @@ import { packedAbuseReportNotificationRecipientSchema } from '@/models/json-sche
 import { packedChatMessageSchema, packedChatMessageLiteSchema, packedChatMessageLiteForRoomSchema, packedChatMessageLiteFor1on1Schema } from '@/models/json-schema/chat-message.js';
 import { packedChatRoomSchema } from '@/models/json-schema/chat-room.js';
 import { packedChatRoomInvitationSchema } from '@/models/json-schema/chat-room-invitation.js';
+import { packedChatRoomVoiceStateSchema } from '@/models/json-schema/chat-room-voice-state.js';
 import { packedChatRoomMembershipSchema } from '@/models/json-schema/chat-room-membership.js';
 import { packedAchievementNameSchema, packedAchievementSchema } from '@/models/json-schema/achievement.js';
 import { packedNoteDraftSchema } from '@/models/json-schema/note-draft.js';
@@ -146,6 +147,7 @@ export const refs = {
 	ChatMessageLiteForRoom: packedChatMessageLiteForRoomSchema,
 	ChatRoom: packedChatRoomSchema,
 	ChatRoomInvitation: packedChatRoomInvitationSchema,
+	ChatRoomVoiceState: packedChatRoomVoiceStateSchema,
 	ChatRoomMembership: packedChatRoomMembershipSchema,
 };
 
