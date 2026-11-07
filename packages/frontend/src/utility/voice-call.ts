@@ -404,6 +404,11 @@ export async function startRecording(): Promise<void> {
 	if (lk != null) {
 		const mic = room.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.track;
 		if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack);
+		// my own tab audio is not played to my speakers, so it only reaches the recording here
+		const shareAudio = room.localParticipant.getTrackPublication(lk.Track.Source.ScreenShareAudio)?.track;
+		if (shareAudio?.mediaStreamTrack != null) addRecordingTrack(shareAudio.mediaStreamTrack);
+		const shareVideo = room.localParticipant.getTrackPublication(lk.Track.Source.ScreenShare)?.track;
+		if (shareVideo?.mediaStreamTrack != null) addRecordingVideo(shareVideo.mediaStreamTrack, true);
 		for (const participant of room.remoteParticipants.values()) {
 			for (const publication of participant.trackPublications.values()) {
 				const track = publication.track?.mediaStreamTrack;
@@ -937,7 +942,12 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 			if (track != null) addRecordingTrack(track.mediaStreamTrack);
 			return;
 		}
+		if (publication.source === Track.Source.ScreenShareAudio) {
+			if (track != null) addRecordingTrack(track.mediaStreamTrack);
+			return;
+		}
 		if (publication.source !== Track.Source.ScreenShare || track == null) return;
+		addRecordingVideo(track.mediaStreamTrack, true);
 		state.screenSharing = true;
 		screenShareTracks.set(participant.identity, track);
 		for (const view of screenShareViews.get(participant.identity) ?? []) track.attach(view.element);
@@ -945,7 +955,15 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 
 	room.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication, participant: LocalParticipant) => {
 		// ブラウザの「共有を停止」で終わった場合もここに来る
-		if (!isCurrent() || publication.source !== Track.Source.ScreenShare) return;
+		if (!isCurrent()) return;
+		if (publication.source === Track.Source.ScreenShareAudio) {
+			const track = publication.track;
+			if (track != null) removeRecordingTrack(track.mediaStreamTrack);
+			return;
+		}
+		if (publication.source !== Track.Source.ScreenShare) return;
+		const track = publication.track;
+		if (track != null) removeRecordingVideo(track.mediaStreamTrack);
 		state.screenSharing = false;
 		detachLocalScreenShare(participant.identity);
 		forgetScreenShare(participant.identity);
