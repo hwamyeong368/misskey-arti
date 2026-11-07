@@ -80,6 +80,8 @@ let recordingChunks: Blob[] = [];
 let recordingBytes = 0;
 let recordingUploads: Promise<void>[] = [];
 // arti: video (screen share or participant tiles) composited next to the voices
+let recordingBus: GainNode | null = null;
+let recordingLevelTimer: number | null = null;
 let recordingCanvas: HTMLCanvasElement | null = null;
 let recordingCanvasStream: MediaStream | null = null;
 let recordingDrawTimer: number | null = null;
@@ -146,11 +148,16 @@ function drawRecordingFrame(): void {
 }
 
 function addRecordingTrack(track: MediaStreamTrack): void {
-	if (recordingContext == null || recordingDestination == null) return;
+	if (recordingContext == null || recordingBus == null) return;
 	if (recordingSources.has(track)) return;
-	const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
-	source.connect(recordingDestination);
-	recordingSources.set(track, source);
+	console.info('[recording] track', track.kind, track.readyState, 'enabled=' + track.enabled, 'muted=' + track.muted);
+	try {
+		const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
+		source.connect(recordingBus);
+		recordingSources.set(track, source);
+	} catch (err) {
+		console.warn('[recording] could not connect a track', err);
+	}
 }
 
 function removeRecordingTrack(track: MediaStreamTrack): void {
@@ -360,6 +367,24 @@ export async function startRecording(): Promise<void> {
 	const destination = context.createMediaStreamDestination();
 	recordingContext = context;
 	recordingDestination = destination;
+	// sources feed a bus; the bus feeds the recorder and a muted analyser we can log
+	const bus = context.createGain();
+	bus.connect(destination);
+	recordingBus = bus;
+	const analyser = context.createAnalyser();
+	analyser.fftSize = 1024;
+	bus.connect(analyser);
+	const silent = context.createGain();
+	silent.gain.value = 0;
+	analyser.connect(silent);
+	silent.connect(context.destination);
+	const levelSamples = new Float32Array(analyser.fftSize);
+	recordingLevelTimer = window.setInterval(() => {
+		analyser.getFloatTimeDomainData(levelSamples);
+		let peak = 0;
+		for (const value of levelSamples) peak = Math.max(peak, Math.abs(value));
+		console.info(`[recording] level ${peak.toFixed(4)} ctx=${context.state} sources=${recordingSources.size}`);
+	}, 1000);
 	recordingSources.clear();
 	recordingChunks = [];
 	recordingBytes = 0;
@@ -372,7 +397,7 @@ export async function startRecording(): Promise<void> {
 	recordingCanvas = canvas;
 	recordingCanvasStream = canvas.captureStream(30);
 	recordingVideos.clear();
-	recordingDrawTimer = window.setInterval(drawRecordingFrame, 66);
+	recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
 	drawRecordingFrame();
 
 	const lk = livekit;
@@ -394,6 +419,7 @@ export async function startRecording(): Promise<void> {
 
 	// connect the sources before the recorder exists, so its audio track starts live
 	console.info(`[recording] ${recordingSources.size} audio source(s)`);
+	os.toast(`녹음 시작 · 오디오 ${recordingSources.size}개`);
 
 	const mimeType = recordingVideoMimeType();
 	const rec = new MediaRecorder(new MediaStream([
@@ -422,6 +448,11 @@ export async function startRecording(): Promise<void> {
 		recordingCanvas = null;
 		recordingCanvasStream?.getTracks().forEach(track => track.stop());
 		recordingCanvasStream = null;
+		if (recordingLevelTimer != null) {
+			window.clearInterval(recordingLevelTimer);
+			recordingLevelTimer = null;
+		}
+		recordingBus = null;
 		recordingContext?.close().catch(() => {});
 		recordingContext = null;
 		recordingDestination = null;
