@@ -70,18 +70,21 @@ let statusDelivery: StatusDelivery | null = null;
 // スピーカーを切り替えた回数。マイクを入れるのを待つあいだに切り替えられたかを見分ける
 let deafenRevision = 0;
 
-// arti: record the call (voices only) and upload the file to the drive
+// arti: record the call in separate tracks (my microphone, the other side, video when present)
 const RECORDING_CHUNK_BYTES = 100 * 1024 * 1024;
-let recorder: MediaRecorder | null = null;
+type RecordingPartKind = 'mic' | 'others' | 'video';
+type RecordingPart = {
+	recorder: MediaRecorder;
+	chunks: Blob[];
+	bytes: number;
+	uploads: Promise<void>[];
+	suffix: string;
+};
+const recordingParts = new Map<RecordingPartKind, RecordingPart>();
 let recordingContext: AudioContext | null = null;
-let recordingDestination: MediaStreamAudioDestinationNode | null = null;
-const recordingSources = new Map<MediaStreamTrack, MediaStreamAudioSourceNode>();
-let recordingChunks: Blob[] = [];
-let recordingBytes = 0;
-let recordingUploads: Promise<void>[] = [];
-// arti: video (screen share or participant tiles) composited next to the voices
-let recordingBus: GainNode | null = null;
-let recordingLevelTimer: number | null = null;
+let recordingMicBus: GainNode | null = null;
+let recordingOthersBus: GainNode | null = null;
+const recordingSources = new Map<MediaStreamTrack, { source: MediaStreamAudioSourceNode; kind: 'mic' | 'others' }>();
 let recordingCanvas: HTMLCanvasElement | null = null;
 let recordingCanvasStream: MediaStream | null = null;
 let recordingDrawTimer: number | null = null;
@@ -147,61 +150,106 @@ function drawRecordingFrame(): void {
 	ready.forEach((entry, i) => drawFit(entry.element, (i % cols) * cw, Math.floor(i / cols) * ch, cw, ch));
 }
 
-function addRecordingTrack(track: MediaStreamTrack): void {
-	if (recordingContext == null || recordingBus == null) return;
-	if (recordingSources.has(track)) return;
-	console.info('[recording] track', track.kind, track.readyState, 'enabled=' + track.enabled, 'muted=' + track.muted);
+function addRecordingTrack(track: MediaStreamTrack, kind: 'mic' | 'others'): void {
+	if (recordingContext == null) return;
+	const bus = kind === 'mic' ? recordingMicBus : recordingOthersBus;
+	if (bus == null || recordingSources.has(track)) return;
 	try {
 		const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
-		source.connect(recordingBus);
-		recordingSources.set(track, source);
+		source.connect(bus);
+		recordingSources.set(track, { source, kind });
 	} catch (err) {
 		console.warn('[recording] could not connect a track', err);
 	}
 }
 
 function removeRecordingTrack(track: MediaStreamTrack): void {
-	const source = recordingSources.get(track);
-	if (source == null) return;
-	source.disconnect();
+	const entry = recordingSources.get(track);
+	if (entry == null) return;
+	entry.source.disconnect();
 	recordingSources.delete(track);
 }
 
-function recordingFileName(): string {
+function recordingFileName(suffix: string): string {
 	const now = new Date();
 	const pad = (n: number) => String(n).padStart(2, '0');
-	return `voice-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.webm`;
+	return `voice-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}${suffix}.webm`;
 }
 
-async function uploadRecording(blob: Blob): Promise<void> {
+async function uploadRecording(blob: Blob, suffix: string): Promise<void> {
 	const roomId = state.room?.id;
 	if (roomId == null || blob.size === 0) return;
 	const form = new FormData();
-	form.append('file', blob, recordingFileName());
+	form.append('file', blob, recordingFileName(suffix));
 	// Misskey authenticates API calls with the token in the form, not with cookies
 	if ($i != null) form.append('i', $i.token);
 	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'omit' });
 	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
 	let file = await res.json() as Misskey.entities.DriveFile;
-	// MP3 plays in more players than WebM/Opus (audio recordings only)
-	if (blob.type.startsWith('audio/') || blob.type.startsWith('video/')) {
-		try {
-			const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
-			if (converted != null) file = converted;
-		} catch { /* keep the WebM when ffmpeg fails */ }
-	}
+	try {
+		const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
+		if (converted != null) file = converted;
+	} catch { /* keep the WebM when ffmpeg fails */ }
 	await misskeyApi('chat/messages/create-to-room', { toRoomId: roomId, fileId: file.id });
 }
 
-function flushRecordingChunk(force: boolean): void {
-	if (recordingChunks.length === 0) return;
-	if (!force && recordingBytes < RECORDING_CHUNK_BYTES) return;
-	const blob = new Blob(recordingChunks, { type: recorder?.mimeType ?? 'audio/webm' });
-	recordingChunks = [];
-	recordingBytes = 0;
-	recordingUploads.push(uploadRecording(blob).catch(err => {
+function flushRecordingChunk(kind: RecordingPartKind, force: boolean): void {
+	const part = recordingParts.get(kind);
+	if (part == null || part.chunks.length === 0) return;
+	if (!force && part.bytes < RECORDING_CHUNK_BYTES) return;
+	const blob = new Blob(part.chunks, { type: part.recorder.mimeType || 'audio/webm' });
+	part.chunks = [];
+	part.bytes = 0;
+	part.uploads.push(uploadRecording(blob, part.suffix).catch(err => {
 		console.error(err);
 	}));
+}
+
+function createRecordingPart(kind: RecordingPartKind, stream: MediaStream, mime: string | undefined, bits: number, suffix: string): void {
+	const options: MediaRecorderOptions = { ...(mime != null ? { mimeType: mime } : {}) };
+	if (kind === 'video') {
+		options.videoBitsPerSecond = bits;
+		options.audioBitsPerSecond = 192_000;
+	} else {
+		options.audioBitsPerSecond = bits;
+	}
+	const rec = new MediaRecorder(stream, options);
+	const part: RecordingPart = { recorder: rec, chunks: [], bytes: 0, uploads: [], suffix };
+	recordingParts.set(kind, part);
+	rec.ondataavailable = (ev) => {
+		if (ev.data.size === 0) return;
+		part.chunks.push(ev.data);
+		part.bytes += ev.data.size;
+		flushRecordingChunk(kind, false);
+	};
+	rec.onstop = () => {
+		flushRecordingChunk(kind, true);
+		void Promise.allSettled(part.uploads);
+		if (kind === 'video') stopRecordingVideo();
+		recordingParts.delete(kind);
+		if (recordingParts.size === 0) teardownRecording();
+	};
+	rec.start(10_000);
+}
+
+function stopRecordingVideo(): void {
+	if (recordingDrawTimer != null) {
+		window.clearInterval(recordingDrawTimer);
+		recordingDrawTimer = null;
+	}
+	for (const track of [...recordingVideos.keys()]) removeRecordingVideo(track);
+	recordingCanvas = null;
+	recordingCanvasStream?.getTracks().forEach(track => track.stop());
+	recordingCanvasStream = null;
+}
+
+function teardownRecording(): void {
+	stopRecordingVideo();
+	recordingMicBus = null;
+	recordingOthersBus = null;
+	recordingContext?.close().catch(() => {});
+	recordingContext = null;
+	recordingSources.clear();
 }
 
 function resetStatusDelivery(): void {
@@ -354,117 +402,81 @@ async function disconnectCurrentRoom(): Promise<void> {
 	}
 }
 
-/** arti: start recording the voices of the call (local microphone + remote participants) */
+/** arti: start recording the call in separate tracks (microphone, the other side, video when present) */
 export async function startRecording(): Promise<void> {
 	const room = current;
-	if (room == null || recorder != null || state.status !== 'connected') return;
+	if (room == null || recordingParts.size > 0 || state.status !== 'connected') return;
 	const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 	if (Context == null || typeof MediaRecorder === 'undefined') return;
 
 	const context = new Context();
 	// a suspended context feeds no samples to the recorder
 	await context.resume().catch(() => {});
-	const destination = context.createMediaStreamDestination();
 	recordingContext = context;
-	recordingDestination = destination;
-	// sources feed a bus; the bus feeds the recorder and a muted analyser we can log
-	const bus = context.createGain();
-	bus.connect(destination);
-	recordingBus = bus;
-	const analyser = context.createAnalyser();
-	analyser.fftSize = 1024;
-	bus.connect(analyser);
-	const silent = context.createGain();
-	silent.gain.value = 0;
-	analyser.connect(silent);
-	silent.connect(context.destination);
-	const levelSamples = new Float32Array(analyser.fftSize);
-	recordingLevelTimer = window.setInterval(() => {
-		analyser.getFloatTimeDomainData(levelSamples);
-		let peak = 0;
-		for (const value of levelSamples) peak = Math.max(peak, Math.abs(value));
-		console.info(`[recording] level ${peak.toFixed(4)} ctx=${context.state} sources=${recordingSources.size}`);
-	}, 1000);
-	recordingSources.clear();
-	recordingChunks = [];
-	recordingBytes = 0;
-	recordingUploads = [];
 
-	// arti: composite the shared screen / participant cameras into the recording
-	const canvas = window.document.createElement('canvas');
-	canvas.width = 1920;
-	canvas.height = 1080;
-	recordingCanvas = canvas;
-	recordingCanvasStream = canvas.captureStream(30);
-	recordingVideos.clear();
-	recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
-	drawRecordingFrame();
+	const micDest = context.createMediaStreamDestination();
+	const othersDest = context.createMediaStreamDestination();
+	const mixedDest = context.createMediaStreamDestination();
+	const micBus = context.createGain();
+	const othersBus = context.createGain();
+	micBus.connect(micDest);
+	micBus.connect(mixedDest);
+	othersBus.connect(othersDest);
+	othersBus.connect(mixedDest);
+	recordingMicBus = micBus;
+	recordingOthersBus = othersBus;
+	recordingSources.clear();
+
+	createRecordingPart('mic', micDest.stream, recordingMimeType(), 128_000, '-mic');
+	createRecordingPart('others', othersDest.stream, recordingMimeType(), 192_000, '-call');
 
 	const lk = livekit;
+	let hasVideo = false;
 	if (lk != null) {
 		const mic = room.localParticipant.getTrackPublication(lk.Track.Source.Microphone)?.track;
-		if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack);
+		if (mic?.mediaStreamTrack != null) addRecordingTrack(mic.mediaStreamTrack, 'mic');
 		// my own tab audio is not played to my speakers, so it only reaches the recording here
 		const shareAudio = room.localParticipant.getTrackPublication(lk.Track.Source.ScreenShareAudio)?.track;
-		if (shareAudio?.mediaStreamTrack != null) addRecordingTrack(shareAudio.mediaStreamTrack);
+		if (shareAudio?.mediaStreamTrack != null) addRecordingTrack(shareAudio.mediaStreamTrack, 'others');
 		const shareVideo = room.localParticipant.getTrackPublication(lk.Track.Source.ScreenShare)?.track;
-		if (shareVideo?.mediaStreamTrack != null) addRecordingVideo(shareVideo.mediaStreamTrack, true);
+		if (shareVideo?.mediaStreamTrack != null) {
+			addRecordingVideo(shareVideo.mediaStreamTrack, true);
+			hasVideo = true;
+		}
 		for (const participant of room.remoteParticipants.values()) {
 			for (const publication of participant.trackPublications.values()) {
 				const track = publication.track?.mediaStreamTrack;
 				if (track == null) continue;
-				if (publication.kind === lk.Track.Kind.Audio) addRecordingTrack(track);
-				else if (publication.kind === lk.Track.Kind.Video) addRecordingVideo(track, publication.source === lk.Track.Source.ScreenShare);
+				if (publication.kind === lk.Track.Kind.Audio) {
+					addRecordingTrack(track, 'others');
+				} else if (publication.kind === lk.Track.Kind.Video) {
+					addRecordingVideo(track, publication.source === lk.Track.Source.ScreenShare);
+					hasVideo = true;
+				}
 			}
 		}
 		for (const track of screenShareTracks.values()) {
-			if (track.mediaStreamTrack != null) addRecordingVideo(track.mediaStreamTrack, true);
+			if (track.mediaStreamTrack != null) {
+				addRecordingVideo(track.mediaStreamTrack, true);
+				hasVideo = true;
+			}
 		}
 	}
 
-	// connect the sources before the recorder exists, so its audio track starts live
-	console.info(`[recording] ${recordingSources.size} audio source(s)`);
-	os.toast(`녹음 시작 · 오디오 ${recordingSources.size}개`);
-
-	const mimeType = recordingVideoMimeType();
-	const rec = new MediaRecorder(new MediaStream([
-		...destination.stream.getAudioTracks(),
-		...recordingCanvasStream.getVideoTracks(),
-	]), {
-		...(mimeType != null ? { mimeType } : {}),
-		videoBitsPerSecond: 8_000_000,
-		audioBitsPerSecond: 128_000,
-	});
-	recorder = rec;
-
-	rec.ondataavailable = (ev) => {
-		if (ev.data.size === 0) return;
-		recordingChunks.push(ev.data);
-		recordingBytes += ev.data.size;
-		flushRecordingChunk(false);
-	};
-	rec.onstop = () => {
-		flushRecordingChunk(true);
-		if (recordingDrawTimer != null) {
-			window.clearInterval(recordingDrawTimer);
-			recordingDrawTimer = null;
-		}
-		for (const track of [...recordingVideos.keys()]) removeRecordingVideo(track);
-		recordingCanvas = null;
-		recordingCanvasStream?.getTracks().forEach(track => track.stop());
-		recordingCanvasStream = null;
-		if (recordingLevelTimer != null) {
-			window.clearInterval(recordingLevelTimer);
-			recordingLevelTimer = null;
-		}
-		recordingBus = null;
-		recordingContext?.close().catch(() => {});
-		recordingContext = null;
-		recordingDestination = null;
-		recordingSources.clear();
-		recorder = null;
-	};
-	rec.start(10_000);
+	// only composite video when there is something to show; otherwise this stays an audio recording
+	if (hasVideo) {
+		const canvas = window.document.createElement('canvas');
+		canvas.width = 1920;
+		canvas.height = 1080;
+		recordingCanvas = canvas;
+		recordingCanvasStream = canvas.captureStream(30);
+		recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
+		drawRecordingFrame();
+		createRecordingPart('video', new MediaStream([
+			...mixedDest.stream.getAudioTracks(),
+			...recordingCanvasStream.getVideoTracks(),
+		]), recordingVideoMimeType(), 8_000_000, '-video');
+	}
 
 	state.recording = true;
 	state.recordingStartedAt = Date.now();
@@ -473,14 +485,14 @@ export async function startRecording(): Promise<void> {
 
 /** arti: stop recording and upload what is left */
 export function stopRecording(): void {
-	const rec = recorder;
-	if (rec == null) return;
+	if (recordingParts.size === 0) return;
 	state.recording = false;
 	state.recordingStartedAt = null;
 	if (current != null) reportStatus(current, true);
-	try { rec.requestData(); } catch { /* not recording yet */ }
-	rec.stop();
-	void Promise.allSettled(recordingUploads);
+	for (const part of [...recordingParts.values()]) {
+		try { part.recorder.requestData(); } catch { /* not recording yet */ }
+		part.recorder.stop();
+	}
 }
 
 export async function joinVoiceCall(room: Misskey.entities.ChatRoom, options: { micEnabled?: boolean } = {}): Promise<void> {
@@ -900,7 +912,7 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 	room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
 		if (!isCurrent()) return;
 		if (track.kind === Track.Kind.Audio) {
-			addRecordingTrack(track.mediaStreamTrack);
+			addRecordingTrack(track.mediaStreamTrack, 'others');
 			window.document.body.appendChild(track.attach());
 			applyVolume(participant);
 		} else if (track.kind === Track.Kind.Video) {
@@ -939,11 +951,11 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 		if (!isCurrent()) return;
 		if (publication.source === Track.Source.Microphone) {
 			startLocalMeter(room);
-			if (track != null) addRecordingTrack(track.mediaStreamTrack);
+			if (track != null) addRecordingTrack(track.mediaStreamTrack, 'mic');
 			return;
 		}
 		if (publication.source === Track.Source.ScreenShareAudio) {
-			if (track != null) addRecordingTrack(track.mediaStreamTrack);
+			if (track != null) addRecordingTrack(track.mediaStreamTrack, 'mic');
 			return;
 		}
 		if (publication.source !== Track.Source.ScreenShare || track == null) return;
@@ -1061,9 +1073,7 @@ function failToConnect(err?: unknown): void {
 
 function resetState(): void {
 	resetStatusDelivery();
-	if (recorder != null) {
-		try { recorder.stop(); } catch { /* already stopped */ }
-	}
+	stopRecording();
 	state.recording = false;
 	state.recordingStartedAt = null;
 	stopLocalMeter?.();
