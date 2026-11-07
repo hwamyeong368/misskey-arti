@@ -85,8 +85,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			try {
 				await execFileAsync('ffmpeg', isVideo
-					? ['-y', '-i', src, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', dst]
-					: ['-y', '-i', src, '-vn', '-c:a', 'libmp3lame', '-b:a', '320k', dst], { timeout: 30 * 60 * 1000 });
+					? ['-y', '-i', src, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-af', 'alimiter=limit=0.95', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', dst]
+					: ['-y', '-i', src, '-vn', '-af', 'alimiter=limit=0.95', '-c:a', 'libmp3lame', '-b:a', '320k', dst], { timeout: 30 * 60 * 1000 });
 				const name = file.name.replace(/\.[^.]+$/, '') + (isVideo ? '.mp4' : '.mp3');
 				const converted = await this.driveService.addFile({ user: me, path: dst, name, force: true });
 				await this.driveService.deleteFile(file, false, me);
