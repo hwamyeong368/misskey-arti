@@ -101,7 +101,7 @@ function recordingVideoMimeType(): string | undefined {
 }
 
 function addRecordingVideo(track: MediaStreamTrack, screen: boolean): void {
-	if (recordingCanvas == null || recordingVideos.has(track)) return;
+	if (recordingVideos.has(track)) return;
 	const element = window.document.createElement('video');
 	element.muted = true;
 	element.playsInline = true;
@@ -427,8 +427,8 @@ export async function startRecording(): Promise<void> {
 	recordingOthersBus = othersBus;
 	recordingSources.clear();
 
-	createRecordingPart('mic', micDest.stream, recordingMimeType(), 128_000, '-mic');
-	createRecordingPart('others', othersDest.stream, recordingMimeType(), 192_000, '-call');
+	createRecordingPart('mic', micDest.stream, recordingMimeType(), 192_000, '-mic');
+	createRecordingPart('others', othersDest.stream, recordingMimeType(), 256_000, '-call');
 
 	const lk = livekit;
 	let hasVideo = false;
@@ -472,6 +472,7 @@ export async function startRecording(): Promise<void> {
 		recordingCanvasStream = canvas.captureStream(30);
 		recordingDrawTimer = window.setInterval(drawRecordingFrame, 33);
 		drawRecordingFrame();
+		console.info(`[recording] video sources=${recordingVideos.size}`);
 		createRecordingPart('video', new MediaStream([
 			...mixedDest.stream.getAudioTracks(),
 			...recordingCanvasStream.getVideoTracks(),
