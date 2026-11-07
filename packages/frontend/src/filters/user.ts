@@ -16,5 +16,5 @@ export const userName = (user: Misskey.entities.User) => {
  * 絵文字の区切りに使われるゼロ幅の文字も除き、名前が絵文字だけのときはユーザー名にする
  */
 export const userNameForLabel = (user: Misskey.entities.User) => {
-	return userName(user).replace(/:[\w+-]+(?:@[\w.-]+)?:/g, ' ').replace(/[​-‍⁠﻿]/g, '').replace(/\s+/g, ' ').trim() || user.username;
+	return userName(user).replace(/:[\w+-]+(?:@[\w.-]+)?:/g, ' ').replace(/[\u200b-\u200d\u2060\ufeff]/g, '').replace(/\s+/g, ' ').trim() || user.username;
 };
