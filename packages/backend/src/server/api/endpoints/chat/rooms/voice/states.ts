@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { In, IsNull } from 'typeorm';
+import { In } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository, ChatRoomsRepository } from '@/models/_.js';
@@ -63,10 +63,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			await this.chatService.checkChatAvailability(me.id, 'read');
 
-			// 参加していないルームと、他のサーバーが持つルームは黙って除外する
+			// 参加していないルームは黙って除外する (arti: remote rooms are included too)
 			const [ownedRooms, memberships] = await Promise.all([
 				this.chatRoomsRepository.findBy({ id: In(ps.roomIds), ownerId: me.id }),
-				this.chatRoomMembershipsRepository.findBy({ roomId: In(ps.roomIds), userId: me.id, room: { owner: { host: IsNull() } } }),
+				this.chatRoomMembershipsRepository.findBy({ roomId: In(ps.roomIds), userId: me.id }),
 			]);
 			const accessible = new Set([...ownedRooms.map(room => room.id), ...memberships.map(membership => membership.roomId)]);
 

@@ -283,15 +283,40 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 	public async getStates(me: { id: MiUser['id'] }, roomIds: MiChatRoom['id'][]): Promise<Packed<'ChatRoomVoiceState'>[]> {
 		if (roomIds.length === 0) return [];
 		const raws = await this.redisClient.mget(...roomIds.map(roomId => this.keyOf(roomId)));
+		const remoteRaws = await this.redisClient.mget(...roomIds.map(roomId => `chatVoice:remote:${roomId}`));
 		const states: Packed<'ChatRoomVoiceState'>[] = [];
 		for (let i = 0; i < roomIds.length; i++) {
 			const raw = raws[i];
-			if (raw == null) continue;
+			if (raw == null) {
+				// arti: a room hosted by another server has no local snapshot; use the one its owner sent
+				const remoteRaw = remoteRaws[i];
+				if (remoteRaw == null) continue;
+				const remote = JSON.parse(remoteRaw) as { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number };
+				if (remote.participants.length === 0) continue;
+				states.push(await this.packRemote(roomIds[i], remote, me));
+				continue;
+			}
 			const snapshot = JSON.parse(raw) as VoiceSnapshot;
 			if (snapshot.participants.length === 0) continue;
 			states.push(await this.pack(roomIds[i], snapshot, me));
 		}
 		return states;
+	}
+
+	/** arti: pack a snapshot received from the server that hosts the room. */
+	private async packRemote(roomId: MiChatRoom['id'], snapshot: { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }, me: { id: MiUser['id'] }): Promise<Packed<'ChatRoomVoiceState'>> {
+		const users = await this.usersRepository.findBy({ uri: In(snapshot.participants.map(p => p.identity)) });
+		const userIdByIdentity = new Map(users.map(user => [user.uri, user.id]));
+		const packedUsers = await this.userEntityService.packMany([...new Set(userIdByIdentity.values())], me);
+		const userById = new Map(packedUsers.map(user => [user.id, user]));
+		const participants: Packed<'ChatRoomVoiceState'>['participants'] = [];
+		for (const p of snapshot.participants) {
+			const userId = userIdByIdentity.get(p.identity);
+			const user = userId != null ? userById.get(userId) : undefined;
+			if (user == null) continue;
+			participants.push({ identity: p.identity, user, screenSharing: p.screenSharing, ...reportedVoiceStatus(p) });
+		}
+		return { roomId, participants, updatedAt: snapshot.updatedAt };
 	}
 
 	@bindThis
