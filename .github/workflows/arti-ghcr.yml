@@ -102,6 +102,7 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create \
+            -t "$REGISTRY_IMAGE:arti" \
             -t "$REGISTRY_IMAGE:${GITHUB_REF_NAME}" \
             -t "$REGISTRY_IMAGE:$VERSION_TAG" \
             -t "$REGISTRY_IMAGE:$SHA_TAG" \
