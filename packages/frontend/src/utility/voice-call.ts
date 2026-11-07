@@ -105,6 +105,9 @@ function recordingVideoMimeType(): string | undefined {
 function addRecordingVideo(track: MediaStreamTrack, screen: boolean): void {
 	// this runs on every share, not only while recording
 	if (recordingContext == null || recordingVideos.has(track)) return;
+	if (screen) {
+		try { track.contentHint = 'detail'; } catch { /* not supported */ }
+	}
 	const element = window.document.createElement('video');
 	element.muted = true;
 	element.playsInline = true;
@@ -131,7 +134,7 @@ function ensureRecordingVideoPart(): void {
 	createRecordingPart('video', new MediaStream([
 		...recordingMixedDest.stream.getAudioTracks(),
 		...recordingCanvasStream!.getVideoTracks(),
-	]), recordingVideoMimeType(), 8_000_000, `${base.replace(/-mic$/, '')}-video-${recordingStamp(new Date())}`);
+	]), recordingVideoMimeType(), 12_000_000, `${base.replace(/-mic$/, '')}-video-${recordingStamp(new Date())}`);
 }
 
 function removeRecordingVideo(track: MediaStreamTrack): void {
@@ -178,6 +181,7 @@ function addRecordingTrack(track: MediaStreamTrack, kind: 'mic' | 'others'): voi
 	if (recordingContext == null) return;
 	const bus = kind === 'mic' ? recordingMicBus : recordingOthersBus;
 	if (bus == null || recordingSources.has(track)) return;
+	console.info('[recording] track', track.kind, 'channels=' + (track.getSettings().channelCount ?? '?'));
 	try {
 		const source = recordingContext.createMediaStreamSource(new MediaStream([track]));
 		source.connect(bus);
@@ -450,6 +454,10 @@ export async function startRecording(): Promise<void> {
 	const micDest = context.createMediaStreamDestination();
 	const othersDest = context.createMediaStreamDestination();
 	const mixedDest = context.createMediaStreamDestination();
+	for (const dest of [micDest, othersDest, mixedDest]) {
+		dest.channelCount = 2;
+		dest.channelCountMode = 'explicit';
+	}
 	const micBus = context.createGain();
 	const othersBus = context.createGain();
 	micBus.connect(micDest);
