@@ -345,6 +345,18 @@ export interface IMove extends IActivity {
 	target: IObject | string;
 }
 
+/**
+ * arti: the participants of a room's voice call. The server that owns the room sends it
+ * as an Update from the owner to the members on other servers.
+ */
+export interface IChatRoomVoiceState extends IObject {
+	type: 'ChatRoomVoiceState';
+	id: string;
+	room: string;
+	participants: { id: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[];
+	updated: string;
+}
+
 export const isCreate = (object: IObject): object is ICreate => getApType(object) === 'Create';
 export const isDelete = (object: IObject): object is IDelete => getApType(object) === 'Delete';
 export const isUpdate = (object: IObject): object is IUpdate => getApType(object) === 'Update';

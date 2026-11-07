@@ -25,6 +25,9 @@ import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.j
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
 import type { MiChatMessage } from '@/models/ChatMessage.js';
 import type { MiChatRoom } from '@/models/ChatRoom.js';
+import type { IChatRoomVoiceState } from '@/core/activitypub/type.js';
+import { chatRoomVoiceStateIdOf } from '@/core/activitypub/misc/chat-room-voice-state.js';
+import { reportedVoiceStatus } from '@/core/voice-participant-status.js';
 import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
@@ -834,6 +837,19 @@ export class ApRendererService {
 	/**
 	 * arti: Renders a chat room as a Group object (format from CherryPick)
 	 */
+	/** arti: the participants of a room's voice call, sent to members on other servers */
+	@bindThis
+	public renderChatRoomVoiceState(room: Pick<MiChatRoom, 'id'>, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[], updatedAt: number): IChatRoomVoiceState {
+		const roomUri = `${this.config.url}/chat/rooms/${room.id}`;
+		return {
+			id: chatRoomVoiceStateIdOf(roomUri),
+			type: 'ChatRoomVoiceState',
+			room: roomUri,
+			participants: participants.map(p => ({ id: p.identity, screenSharing: p.screenSharing, ...reportedVoiceStatus(p) })),
+			updated: new Date(updatedAt).toISOString(),
+		};
+	}
+
 	@bindThis
 	public renderChatRoom(room: MiChatRoom, owner: MiUser): IObject {
 		const isLocal = owner.uri == null;

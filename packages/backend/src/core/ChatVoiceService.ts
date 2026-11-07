@@ -32,6 +32,10 @@ import { RoleService } from '@/core/RoleService.js';
 import type { RolePolicies } from '@/core/RoleService.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { HostPolicyService } from '@/core/HostPolicyService.js';
+import { QueueService } from '@/core/QueueService.js';
+import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
+import type { IObject } from '@/core/activitypub/type.js';
+import { parseChatRoomVoiceState } from '@/core/activitypub/misc/chat-room-voice-state.js';
 import type { IceServer } from '@/core/CloudflareTurnService.js';
 
 const REFRESH_DELAY_MS = 500;
@@ -180,6 +184,8 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		private globalEventService: GlobalEventService,
 		private roleService: RoleService,
 		private hostPolicyService: HostPolicyService,
+		private queueService: QueueService,
+		private apRendererService: ApRendererService,
 		private loggerService: LoggerService,
 	) {
 		this.logger = this.loggerService.getLogger('chat-voice');
@@ -247,10 +253,19 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		};
 	}
 
-	/** arti: remember the participants of a call hosted by another server. */
+	/** arti: remember the participants of a call hosted by another server. Older snapshots are ignored. */
 	@bindThis
-	public async storeRemoteSnapshot(room: MiChatRoom, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[], updatedAt: number): Promise<void> {
-		await this.redisClient.set(`chatVoice:remote:${room.id}`, JSON.stringify({ participants, updatedAt }), 'EX', 600);
+	public async storeRemoteSnapshot(room: MiChatRoom, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[], updatedAt: number): Promise<'stored' | 'stale'> {
+		const key = `chatVoice:remote:${room.id}`;
+		const raw = await this.redisClient.get(key);
+		if (raw != null) {
+			try {
+				const previous = JSON.parse(raw) as { updatedAt?: unknown };
+				if (typeof previous.updatedAt === 'number' && previous.updatedAt >= updatedAt) return 'stale';
+			} catch { /* overwrite broken state */ }
+		}
+		await this.redisClient.set(key, JSON.stringify({ participants, updatedAt }), 'EX', 600);
+		return 'stored';
 	}
 
 	/** 認証したユーザー本人の、接続中のセッションの設定 (マイク・スピーカー) だけを受け付ける */
@@ -304,7 +319,7 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 	}
 
 	/** arti: pack a snapshot received from the server that hosts the room. */
-	private async packRemote(roomId: MiChatRoom['id'], snapshot: { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[]; updatedAt: number }, me: { id: MiUser['id'] }): Promise<Packed<'ChatRoomVoiceState'>> {
+	private async packRemote(roomId: MiChatRoom['id'], snapshot: { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[]; updatedAt: number }, me: { id: MiUser['id'] } | null): Promise<Packed<'ChatRoomVoiceState'>> {
 		const users = await this.usersRepository.findBy({ uri: In(snapshot.participants.map(p => p.identity)) });
 		const userIdByIdentity = new Map(users.map(user => [user.uri, user.id]));
 		const packedUsers = await this.userEntityService.packMany([...new Set(userIdByIdentity.values())], me);
@@ -393,6 +408,71 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 		for (const userId of await this.localAudienceOf(room)) {
 			this.globalEventService.publishMainStream(userId, 'chatRoomVoiceState', packed);
 		}
+
+		// arti: tell the members on other servers too, so their list changes without rejoining
+		await this.deliverSnapshotToRemoteMembers(room, snapshot).catch(err => {
+			this.logger.warn(`Failed to deliver the voice state of ${roomId} to other servers: ${err}`);
+		});
+	}
+
+	/** arti: the last snapshot delivered to other servers, to skip unchanged ones */
+	private readonly lastDelivered = new Map<string, { hash: string; at: number }>();
+
+	private async deliverSnapshotToRemoteMembers(room: MiChatRoom, snapshot: VoiceSnapshot): Promise<void> {
+		if (!isRemoteVoiceCallEnabled(this.meta)) return;
+
+		const hash = JSON.stringify(snapshot.participants.map(p => [p.identity, p.screenSharing, p.micMuted, p.deafened, p.recording]));
+		const now = Date.now();
+		const last = this.lastDelivered.get(room.id);
+		if (last != null && last.hash === hash && now - last.at < 30_000) return;
+
+		const owner = await this.usersRepository.findOneBy({ id: room.ownerId });
+		if (owner == null || owner.host != null) return;
+
+		const memberships = await this.chatRoomMembershipsRepository.findBy({ roomId: room.id });
+		const members = await this.usersRepository.find({
+			where: { id: In(memberships.map(m => m.userId)) },
+			select: { id: true, host: true, inbox: true, sharedInbox: true },
+		});
+		const inboxes = new Map<string, boolean>();
+		for (const member of members) {
+			if (member.host == null) continue;
+			if (member.inbox != null) inboxes.set(member.inbox, false);
+			if (member.sharedInbox != null) inboxes.set(member.sharedInbox, true);
+		}
+		if (inboxes.size === 0) return;
+
+		const activity = this.apRendererService.addContext({
+			type: 'Update',
+			actor: this.userEntityService.genLocalUserUri(owner.id),
+			object: this.apRendererService.renderChatRoomVoiceState(room, snapshot.participants, snapshot.updatedAt),
+			published: new Date(snapshot.updatedAt).toISOString(),
+		});
+		await Promise.all([...inboxes].map(([inbox, isShared]) => this.queueService.deliver(owner, activity, inbox, isShared)));
+		this.lastDelivered.set(room.id, { hash, at: now });
+	}
+
+	/** arti: a snapshot arrived from the owner of a mirror room */
+	@bindThis
+	public async receiveRemoteSnapshot(actor: MiRemoteUser, object: IObject): Promise<string> {
+		if (!isRemoteVoiceCallEnabled(this.meta)) return 'skip: remote voice calls are disabled';
+
+		const parsed = parseChatRoomVoiceState(actor.uri, object, MAX_ROOM_MEMBERS + 1);
+		if (!parsed.ok) return `skip: ${parsed.reason}`;
+		const { roomId, participants, updatedAt } = parsed.state;
+
+		const room = await this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: { owner: true } });
+		if (room == null) return 'skip: unknown room';
+		if (room.ownerId !== actor.id) return 'skip: sender does not own the room';
+
+		const stored = await this.storeRemoteSnapshot(room, participants, updatedAt);
+		if (stored !== 'stored') return 'skip: voice state is not newer than the last one';
+
+		const packed = await this.packRemote(room.id, { participants, updatedAt }, null);
+		for (const userId of await this.localAudienceOf(room)) {
+			this.globalEventService.publishMainStream(userId, 'chatRoomVoiceState', packed);
+		}
+		return 'ok: voice state stored';
 	}
 
 	/**
