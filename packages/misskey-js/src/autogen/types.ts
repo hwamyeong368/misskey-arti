@@ -5883,6 +5883,7 @@ export type components = {
                 user: components['schemas']['UserLite'];
                 micMuted?: boolean;
                 deafened?: boolean;
+                recording?: boolean;
                 screenSharing: boolean;
             }[];
             updatedAt: number;
@@ -19337,6 +19338,7 @@ export interface operations {
                     sessionId: string;
                     micMuted: boolean;
                     deafened: boolean;
+                    recording?: boolean;
                 };
             };
         };

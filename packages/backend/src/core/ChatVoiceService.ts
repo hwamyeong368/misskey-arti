@@ -108,7 +108,7 @@ const REFRESH_EVENTS = new Set([
 ]);
 
 type VoiceSnapshot = {
-	participants: { identity: string; userId: MiUser['id']; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[];
+	participants: { identity: string; userId: MiUser['id']; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[];
 	updatedAt: number;
 };
 
@@ -206,7 +206,7 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 	 * whether the room exists.
 	 */
 	@bindThis
-	public async issueRemoteJoinToken(user: MiRemoteUser, roomId: MiChatRoom['id'], canScreenShareRequested: boolean): Promise<(JoinCredentials & { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }) | 'forbidden'> {
+	public async issueRemoteJoinToken(user: MiRemoteUser, roomId: MiChatRoom['id'], canScreenShareRequested: boolean): Promise<(JoinCredentials & { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[]; updatedAt: number }) | 'forbidden'> {
 		if (!this.liveKitService.isEnabled || !isRemoteVoiceCallEnabled(this.meta)) return 'forbidden';
 		if (user.host == null) return 'forbidden';
 
@@ -237,7 +237,7 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 
 	/** Current participant snapshot of a room hosted here, for a remote server. */
 	@bindThis
-	public async snapshotOf(roomId: MiChatRoom['id']): Promise<{ participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }> {
+	public async snapshotOf(roomId: MiChatRoom['id']): Promise<{ participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[]; updatedAt: number }> {
 		const raw = await this.redisClient.get(this.keyOf(roomId));
 		if (raw == null) return { participants: [], updatedAt: Date.now() };
 		const snapshot = JSON.parse(raw) as VoiceSnapshot;
@@ -249,13 +249,13 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 
 	/** arti: remember the participants of a call hosted by another server. */
 	@bindThis
-	public async storeRemoteSnapshot(room: MiChatRoom, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[], updatedAt: number): Promise<void> {
+	public async storeRemoteSnapshot(room: MiChatRoom, participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[], updatedAt: number): Promise<void> {
 		await this.redisClient.set(`chatVoice:remote:${room.id}`, JSON.stringify({ participants, updatedAt }), 'EX', 600);
 	}
 
 	/** 認証したユーザー本人の、接続中のセッションの設定 (マイク・スピーカー) だけを受け付ける */
 	@bindThis
-	public async reportStatus(user: MiUser, roomId: string, sessionId: string, status: { micMuted: boolean; deafened: boolean }): Promise<boolean> {
+	public async reportStatus(user: MiUser, roomId: string, sessionId: string, status: { micMuted: boolean; deafened: boolean; recording?: boolean }): Promise<boolean> {
 		if (!this.liveKitService.isEnabled) return false;
 		const participant = { identity: this.liveKitService.identityOf(user), userId: user.id };
 		const context = await this.admissionContextOf(roomId, [participant]);
@@ -291,7 +291,7 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 				// arti: a room hosted by another server has no local snapshot; use the one its owner sent
 				const remoteRaw = remoteRaws[i];
 				if (remoteRaw == null) continue;
-				const remote = JSON.parse(remoteRaw) as { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number };
+				const remote = JSON.parse(remoteRaw) as { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[]; updatedAt: number };
 				if (remote.participants.length === 0) continue;
 				states.push(await this.packRemote(roomIds[i], remote, me));
 				continue;
@@ -304,7 +304,7 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 	}
 
 	/** arti: pack a snapshot received from the server that hosts the room. */
-	private async packRemote(roomId: MiChatRoom['id'], snapshot: { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[]; updatedAt: number }, me: { id: MiUser['id'] }): Promise<Packed<'ChatRoomVoiceState'>> {
+	private async packRemote(roomId: MiChatRoom['id'], snapshot: { participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[]; updatedAt: number }, me: { id: MiUser['id'] }): Promise<Packed<'ChatRoomVoiceState'>> {
 		const users = await this.usersRepository.findBy({ uri: In(snapshot.participants.map(p => p.identity)) });
 		const userIdByIdentity = new Map(users.map(user => [user.uri, user.id]));
 		const packedUsers = await this.userEntityService.packMany([...new Set(userIdByIdentity.values())], me);
