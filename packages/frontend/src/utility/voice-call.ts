@@ -6,6 +6,7 @@
 import { reactive, readonly } from 'vue';
 import * as Misskey from 'misskey-js';
 import { apiUrl, url } from '@@/js/config.js';
+import { $i } from '@/i.js';
 import type { AudioCaptureOptions, DisconnectReason, LocalAudioTrack, LocalParticipant, LocalTrack, LocalTrackPublication, Participant, RemoteParticipant, RemoteTrack, RemoteTrackPublication, Room, RoomConnectOptions, TrackPublication, VideoPreset } from 'livekit-client';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { isApiError } from '@/utility/api-error.js';
@@ -110,7 +111,9 @@ async function uploadRecording(blob: Blob): Promise<void> {
 	if (roomId == null || blob.size === 0) return;
 	const form = new FormData();
 	form.append('file', blob, recordingFileName());
-	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'include' });
+	// Misskey authenticates API calls with the token in the form, not with cookies
+	if ($i != null) form.append('i', $i.token);
+	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'omit' });
 	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
 	const file = await res.json() as Misskey.entities.DriveFile;
 	await misskeyApi('chat/messages/create-to-room', { toRoomId: roomId, fileId: file.id });
