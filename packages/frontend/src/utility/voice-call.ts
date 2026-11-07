@@ -177,7 +177,7 @@ async function uploadRecording(blob: Blob): Promise<void> {
 	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
 	let file = await res.json() as Misskey.entities.DriveFile;
 	// MP3 plays in more players than WebM/Opus (audio recordings only)
-	if (blob.type.startsWith('audio/')) {
+	if (blob.type.startsWith('audio/') || blob.type.startsWith('video/')) {
 		try {
 			const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
 			if (converted != null) file = converted;

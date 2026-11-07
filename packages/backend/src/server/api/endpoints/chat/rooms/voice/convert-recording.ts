@@ -75,15 +75,19 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (file == null || file.userId !== me.id) throw new ApiError(meta.errors.noSuchFile);
 			if (!file.storedInternal || file.accessKey == null) throw new ApiError(meta.errors.conversionFailed);
 			// already converted, or not a recording
-			if (!file.type.startsWith('audio/webm')) return null;
+			const isAudio = file.type.startsWith('audio/webm');
+			const isVideo = file.type.startsWith('video/webm');
+			if (!isAudio && !isVideo) return null;
 
 			const src = this.internalStorageService.resolvePath(file.accessKey);
 			const dir = fs.mkdtempSync(Path.join(os.tmpdir(), 'arti-recording-'));
-			const dst = Path.join(dir, 'recording.mp3');
+			const dst = Path.join(dir, isVideo ? 'recording.mp4' : 'recording.mp3');
 
 			try {
-				await execFileAsync('ffmpeg', ['-y', '-i', src, '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', dst], { timeout: 5 * 60 * 1000 });
-				const name = file.name.replace(/\.[^.]+$/, '') + '.mp3';
+				await execFileAsync('ffmpeg', isVideo
+					? ['-y', '-i', src, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', dst]
+					: ['-y', '-i', src, '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', dst], { timeout: 30 * 60 * 1000 });
+				const name = file.name.replace(/\.[^.]+$/, '') + (isVideo ? '.mp4' : '.mp3');
 				const converted = await this.driveService.addFile({ user: me, path: dst, name, force: true });
 				await this.driveService.deleteFile(file, false, me);
 				return await this.driveFileEntityService.pack(converted, { self: true });
