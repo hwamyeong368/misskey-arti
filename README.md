@@ -1,7 +1,5 @@
 # 컨텍트 포크 (CT 포크)
 
-[한국어](#컨텍트-포크-ct-포크) · [English](#english) · [日本語](#日本語)
-
 미스키의 **버터스콘 포크**를 기반으로 기능을 추가·수정한 비공식 포크입니다. 초코픽·체리픽 등 다른 포크에서 가져온 기능을 중심으로 구성했으며, 일부 기능은 직접 개발하거나 수정했습니다.
 
 ## 주요 기능
@@ -20,52 +18,6 @@
 - 원본: [Misskey](https://github.com/misskey-dev/misskey) · [버터스콘 포크](https://github.com/ZerglingGo/misskey)
 - 라이선스: **AGPL-3.0-only**
 - 원본 프로젝트와 가져온 코드의 저작권 및 라이선스 표시는 유지합니다.
-
-## English
-
-### Contect Fork (CT Fork)
-
-An unofficial fork based on **Butterscone Fork**, a fork of Misskey. It mainly incorporates features cherry-picked from other forks, including ChocoPick and CherryPick, alongside features developed or modified for this fork.
-
-### Features
-
-- An option to hide server disconnection notifications
-- Message federation between forks that support chat federation (e.g. **Contect Fork ↔ CherryPick**)
-- Audio and video recording during calls
-
-### Before using
-
-This fork is under development and testing. Some parts of the implementation may be rough, and bugs or unexpected behavior may occur. Test thoroughly and back up your data before using it in production.
-
-### Source code and license
-
-- [Source code](https://github.com/hwamyeong368/misskey-ct)
-- Upstream: [Misskey](https://github.com/misskey-dev/misskey) · [Butterscone Fork](https://github.com/ZerglingGo/misskey)
-- License: **AGPL-3.0-only**
-- Copyright and license notices from the original projects and incorporated code are preserved.
-
-## 日本語
-
-### コンテクトフォーク（CTフォーク）
-
-Misskeyのフォークである**バタースコーンフォーク**をベースに、機能の追加・修正を行った非公式フォークです。ChocoPick・CherryPickなど、ほかのフォークから取り込んだ機能を中心に構成しており、一部の機能は本フォークで開発・修正しています。
-
-### 主な機能
-
-- サーバーとの接続が切れた際の通知を「表示しない」オプション
-- チャット連合に対応したフォーク間でのメッセージ連合（例：**コンテクトフォーク ↔ CherryPick**）
-- 通話中の録音・録画
-
-### ご利用にあたって
-
-現在、開発・テスト段階です。実装に不慣れな部分もあり、不具合や予期しない動作が発生する可能性があります。本番環境に導入する前に、十分なテストとデータのバックアップを行ってください。
-
-### ソースコード・ライセンス
-
-- [ソースコード](https://github.com/hwamyeong368/misskey-ct)
-- オリジナル：[Misskey](https://github.com/misskey-dev/misskey) ・ [バタースコーンフォーク](https://github.com/ZerglingGo/misskey)
-- ライセンス：**AGPL-3.0-only**
-- 元のプロジェクトおよび取り込んだコードの著作権・ライセンス表示を維持しています。
 
 ---
 
