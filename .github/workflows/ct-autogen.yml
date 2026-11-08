@@ -1,4 +1,4 @@
-# arti: regenerate generated files on GitHub and commit them back to the branch.
+# CT: regenerate generated files on GitHub and commit them back to the branch.
 # Use this instead of building on a low-memory machine.
 name: Regenerate autogen files
 
@@ -8,13 +8,13 @@ on:
       branch:
         description: 'Branch to regenerate'
         required: true
-        default: 'CT'
+        default: 'main'
 
 permissions:
   contents: write
 
 concurrency:
-  group: arti-autogen-${{ inputs.branch }}
+  group: ct-autogen-${{ inputs.branch }}
   cancel-in-progress: true
 
 jobs:

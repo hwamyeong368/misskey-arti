@@ -14,7 +14,7 @@
 
 ## 소스 코드 및 라이선스
 
-- [소스 코드](https://github.com/hwamyeong368/misskey-arti)
+- [소스 코드](https://github.com/hwamyeong368/misskey-ct)
 - 라이선스: **AGPL-3.0-only**
 - 원본 프로젝트와 가져온 코드의 저작권 및 라이선스 표시는 유지합니다.
 
