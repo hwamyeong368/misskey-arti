@@ -12,7 +12,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.body">
 		<div :class="$style.avatarFrame"><MkAvatar :user="participant.user" :link="false" :preview="false" :class="$style.avatar"/></div>
 		<div :class="$style.who">
-			<div v-if="participant.micMuted || participant.deafened" :class="$style.status">
+			<div v-if="participant.micMuted || participant.deafened || participant.recording" :class="$style.status">
+				<span v-if="participant.recording" :class="$style.recording"><i class="ti ti-circle-filled" aria-hidden="true"></i> {{ i18n.ts._voiceCall.recording }}</span>
 				<i v-if="participant.micMuted && !participant.deafened" v-tooltip="i18n.ts._voiceCall.micMuted" class="ti ti-microphone-off" role="img" :aria-label="i18n.ts._voiceCall.micMuted"></i>
 				<i v-if="participant.deafened" v-tooltip="i18n.ts._voiceCall.deafened" class="ti ti-headphones-off" role="img" :aria-label="i18n.ts._voiceCall.deafened"></i>
 			</div>
@@ -145,5 +146,13 @@ const emit = defineEmits<{
 	text-align: center;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.recording {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--MI_THEME-error);
+	font-weight: 600;
 }
 </style>

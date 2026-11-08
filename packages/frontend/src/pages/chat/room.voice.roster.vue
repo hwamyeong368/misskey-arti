@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					@contextmenu="onContextMenu(p, menuable, $event)"
 				>
 					<MkAvatar :user="p.user" :link="false" :decorations="[]" :class="$style.avatar"/>
-					<span :class="$style.status"><i v-if="p.deafened" class="ti ti-headphones-off" role="img" :aria-label="i18n.ts._voiceCall.deafened"></i><i v-else-if="p.micMuted" class="ti ti-microphone-off" role="img" :aria-label="i18n.ts._voiceCall.micMuted"></i></span>
+					<span :class="$style.status"><span v-if="p.recording" :class="$style.recording"><i class="ti ti-circle-filled" aria-hidden="true"></i> {{ i18n.ts._voiceCall.recording }}</span><i v-if="p.deafened" class="ti ti-headphones-off" role="img" :aria-label="i18n.ts._voiceCall.deafened"></i><i v-else-if="p.micMuted" class="ti ti-microphone-off" role="img" :aria-label="i18n.ts._voiceCall.micMuted"></i></span>
 					<MkUserName :user="p.user" :class="$style.name"/><i v-if="menuable" class="ti ti-dots" aria-hidden="true"></i>
 				</component>
 			</div>
@@ -79,7 +79,7 @@ function onContextMenu(p: typeof rows.value[number]['p'], menuable: boolean, ev:
 // button でない行 (div) は UA の box-sizing: border-box を持たないので、padding の分だけはみ出さないよう明示する
 .person {
 	display: grid;
-	grid-template-columns: 40px 16px minmax(0, 1fr) 20px;
+	grid-template-columns: 40px max-content minmax(0, 1fr) 20px;
 	align-items: center;
 	gap: 8px;
 	box-sizing: border-box;
@@ -107,7 +107,15 @@ function onContextMenu(p: typeof rows.value[number]['p'], menuable: boolean, ev:
 }
 
 .status {
+	display: flex;
+	align-items: center;
+	gap: 4px;
 	font-size: 12px;
 	opacity: .75;
+}
+
+.recording {
+	color: var(--MI_THEME-error);
+	font-weight: 600;
 }
 </style>

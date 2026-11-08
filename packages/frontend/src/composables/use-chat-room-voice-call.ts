@@ -48,7 +48,7 @@ export function useChatRoomVoiceCall(room: MaybeRefOrGetter<Misskey.entities.Cha
 		const listed = target == null ? [] : states.value.get(target.id)?.participants ?? [];
 		if (!inThisCall.value) return listed;
 		return listed.map(participant => participant.identity === myIdentity
-			? { ...participant, screenSharing: voiceCall.screenSharing, micMuted: !voiceCall.micEnabled, deafened: voiceCall.deafened }
+			? { ...participant, screenSharing: voiceCall.screenSharing, micMuted: !voiceCall.micEnabled, deafened: voiceCall.deafened, recording: voiceCall.recording }
 			: participant);
 	});
 

@@ -11,6 +11,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@pointerdown="showControls"
 >
 	<span :class="showsStatus ? $style.status : '_srOnly'" :aria-live="announcesStatus ? 'polite' : 'off'">{{ voiceCallStatusText }}</span>
+	<div v-if="recording" :class="$style.recording" role="status">
+		<i class="ti ti-circle-filled" aria-hidden="true"></i> {{ i18n.ts._voiceCall.recording }}
+	</div>
 	<div v-if="watchedParticipants.length" ref="screensEl" :class="$style.screensSpace">
 		<XScreens :participants="watchedParticipants" :hideStrip="membersHidden" fill :class="$style.screens" :style="screenStyle"/>
 	</div>
@@ -85,6 +88,7 @@ const screensEl = useTemplateRef('screensEl');
 const announcesStatus = useVoiceCallStatusAnnouncer(inThisCall, rootEl);
 const membersHidden = ref(false), active = ref(true), menuOpen = ref(false), hovering = ref(false);
 const showsStatus = computed(() => inThisCall.value && (voiceCall.status === 'connecting' || voiceCall.status === 'reconnecting'));
+const recording = computed(() => (inThisCall.value && voiceCall.recording) || participants.value.some(participant => participant.recording));
 let idleTimer: number | undefined;
 
 function showControls() { active.value = true; window.clearTimeout(idleTimer); idleTimer = window.setTimeout(() => { active.value = false; }, 1800); }
@@ -258,6 +262,20 @@ const screenStyle = computed(() => {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	pointer-events: none;
+}
+
+.recording {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	flex: 0 0 auto;
+	padding: 6px 12px;
+	border-radius: var(--MI-radius);
+	background: var(--MI_THEME-panel);
+	color: var(--MI_THEME-error);
+	font-size: .85em;
+	font-weight: 600;
 }
 
 .list {
