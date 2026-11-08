@@ -17,6 +17,7 @@
 ## 소스 코드 및 라이선스
 
 - [소스 코드](https://github.com/hwamyeong368/misskey-ct)
+- 원본: [Misskey](https://github.com/misskey-dev/misskey) · [버터스콘 포크](https://github.com/ZerglingGo/misskey)
 - 라이선스: **AGPL-3.0-only**
 - 원본 프로젝트와 가져온 코드의 저작권 및 라이선스 표시는 유지합니다.
 
@@ -39,6 +40,7 @@ This fork is under development and testing. Some parts of the implementation may
 ### Source code and license
 
 - [Source code](https://github.com/hwamyeong368/misskey-ct)
+- Upstream: [Misskey](https://github.com/misskey-dev/misskey) · [Butterscone Fork](https://github.com/ZerglingGo/misskey)
 - License: **AGPL-3.0-only**
 - Copyright and license notices from the original projects and incorporated code are preserved.
 
@@ -61,6 +63,7 @@ Misskeyのフォークである**バタースコーンフォーク**をベース
 ### ソースコード・ライセンス
 
 - [ソースコード](https://github.com/hwamyeong368/misskey-ct)
+- オリジナル：[Misskey](https://github.com/misskey-dev/misskey) ・ [バタースコーンフォーク](https://github.com/ZerglingGo/misskey)
 - ライセンス：**AGPL-3.0-only**
 - 元のプロジェクトおよび取り込んだコードの著作権・ライセンス表示を維持しています。
 
