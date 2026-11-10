@@ -71,6 +71,9 @@ import { MiUserPending } from '@/models/UserPending.js';
 import { MiUserProfile } from '@/models/UserProfile.js';
 import { MiUserPublickey } from '@/models/UserPublickey.js';
 import { MiUserSecurityKey } from '@/models/UserSecurityKey.js';
+// kyunet: fork-only LLM translation tables
+import { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
+import { MiKyunetTranslation } from '@/models/KyunetTranslation.js';
 import { MiWebhook } from '@/models/Webhook.js';
 import { MiSystemWebhook } from '@/models/SystemWebhook.js';
 import { MiChannel } from '@/models/Channel.js';
@@ -196,6 +199,9 @@ export const entities = [
 	MiUserListMembership,
 	MiUserNotePining,
 	MiUserSecurityKey,
+	// kyunet: fork-only LLM translation tables
+	MiKyunetTranslationSetting,
+	MiKyunetTranslation,
 	MiUsedUsername,
 	MiFollowing,
 	MiFollowRequest,

@@ -164,6 +164,10 @@ import { ApQuestionService } from './activitypub/models/ApQuestionService.js';
 import { QueueModule } from './QueueModule.js';
 import { QueueService } from './QueueService.js';
 import { LoggerService } from './LoggerService.js';
+// kyunet: fork-only LLM translation services
+import { KyunetTranslationSettingService } from './KyunetTranslationSettingService.js';
+import { KyunetTranslationLlmClient } from './KyunetTranslationLlmClient.js';
+import { KyunetTranslationService } from './KyunetTranslationService.js';
 import { TelemetryService } from './telemetry/TelemetryService.js';
 import type { Provider } from '@nestjs/common';
 
@@ -325,6 +329,10 @@ const $ApMentionService: Provider = { provide: 'ApMentionService', useExisting: 
 const $ApNoteService: Provider = { provide: 'ApNoteService', useExisting: ApNoteService };
 const $ApPersonService: Provider = { provide: 'ApPersonService', useExisting: ApPersonService };
 const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting: ApQuestionService };
+// kyunet: fork-only LLM translation services
+const $KyunetTranslationSettingService: Provider = { provide: 'KyunetTranslationSettingService', useExisting: KyunetTranslationSettingService };
+const $KyunetTranslationLlmClient: Provider = { provide: 'KyunetTranslationLlmClient', useExisting: KyunetTranslationLlmClient };
+const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService', useExisting: KyunetTranslationService };
 //#endregion
 
 @Module({
@@ -413,6 +421,9 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		LiveKitService,
 		RegistryApiService,
 		ReversiService,
+		KyunetTranslationSettingService,
+		KyunetTranslationLlmClient,
+		KyunetTranslationService,
 		PageService,
 
 		ChartLoggerService,
@@ -574,6 +585,9 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$LiveKitService,
 		$RegistryApiService,
 		$ReversiService,
+		$KyunetTranslationSettingService,
+		$KyunetTranslationLlmClient,
+		$KyunetTranslationService,
 		$PageService,
 
 		$ChartLoggerService,
@@ -735,6 +749,9 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		LiveKitService,
 		RegistryApiService,
 		ReversiService,
+		KyunetTranslationSettingService,
+		KyunetTranslationLlmClient,
+		KyunetTranslationService,
 		PageService,
 
 		FederationChart,
@@ -894,6 +911,9 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		$LiveKitService,
 		$RegistryApiService,
 		$ReversiService,
+		$KyunetTranslationSettingService,
+		$KyunetTranslationLlmClient,
+		$KyunetTranslationService,
 		$PageService,
 
 		$FederationChart,

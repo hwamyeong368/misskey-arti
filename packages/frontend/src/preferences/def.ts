@@ -323,6 +323,16 @@ export const PREF_DEF = definePreferences({
 	showClipButtonInNoteFooter: {
 		default: false,
 	},
+	// kyunet: fork-only LLM translation preferences (spec 7.2). Opt-in because they trigger automatic requests.
+	'kyunetTranslation.autoNotes': {
+		default: false,
+	},
+	'kyunetTranslation.userNames': {
+		default: false,
+	},
+	'kyunetTranslation.profiles': {
+		default: false,
+	},
 	reactionsDisplaySize: {
 		default: 'medium' as 'small' | 'medium' | 'large',
 	},

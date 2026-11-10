@@ -75,6 +75,12 @@ import type {
 	AdminInviteCreateResponse,
 	AdminInviteListRequest,
 	AdminInviteListResponse,
+	AdminKyunetTranslationClearCacheRequest,
+	AdminKyunetTranslationClearCacheResponse,
+	AdminKyunetTranslationShowResponse,
+	AdminKyunetTranslationTestRequest,
+	AdminKyunetTranslationTestResponse,
+	AdminKyunetTranslationUpdateRequest,
 	AdminMetaResponse,
 	AdminPromoCreateRequest,
 	AdminQueueClearRequest,
@@ -500,6 +506,8 @@ import type {
 	InviteLimitResponse,
 	InviteListRequest,
 	InviteListResponse,
+	KyunetTranslateRequest,
+	KyunetTranslateResponse,
 	MetaRequest,
 	MetaResponse,
 	MiauthGenTokenRequest,
@@ -742,6 +750,10 @@ export type Endpoints = {
 	'admin/get-user-ips': { req: AdminGetUserIpsRequest; res: AdminGetUserIpsResponse };
 	'admin/invite/create': { req: AdminInviteCreateRequest; res: AdminInviteCreateResponse };
 	'admin/invite/list': { req: AdminInviteListRequest; res: AdminInviteListResponse };
+	'admin/kyunet/translation/clear-cache': { req: AdminKyunetTranslationClearCacheRequest; res: AdminKyunetTranslationClearCacheResponse };
+	'admin/kyunet/translation/show': { req: EmptyRequest; res: AdminKyunetTranslationShowResponse };
+	'admin/kyunet/translation/test': { req: AdminKyunetTranslationTestRequest; res: AdminKyunetTranslationTestResponse };
+	'admin/kyunet/translation/update': { req: AdminKyunetTranslationUpdateRequest; res: EmptyResponse };
 	'admin/meta': { req: EmptyRequest; res: AdminMetaResponse };
 	'admin/promo/create': { req: AdminPromoCreateRequest; res: EmptyResponse };
 	'admin/queue/clear': { req: AdminQueueClearRequest; res: EmptyResponse };
@@ -1023,6 +1035,7 @@ export type Endpoints = {
 	'invite/delete': { req: InviteDeleteRequest; res: EmptyResponse };
 	'invite/limit': { req: EmptyRequest; res: InviteLimitResponse };
 	'invite/list': { req: InviteListRequest; res: InviteListResponse };
+	'kyunet/translate': { req: KyunetTranslateRequest; res: KyunetTranslateResponse };
 	'meta': { req: MetaRequest; res: MetaResponse };
 	'miauth/gen-token': { req: MiauthGenTokenRequest; res: MiauthGenTokenResponse };
 	'mute/create': { req: MuteCreateRequest; res: EmptyResponse };

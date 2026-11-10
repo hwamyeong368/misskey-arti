@@ -13947,6 +13947,252 @@ export interface Locale extends ILocale {
          */
         "moveChatRight": string;
     };
+    "_kyunetTranslation": {
+        /**
+         * LLM翻訳
+         */
+        "title": string;
+        /**
+         * OpenAI互換のChat Completions APIでノートやユーザー名、プロフィールを翻訳します。
+         */
+        "description": string;
+        /**
+         * LLM翻訳を有効にする
+         */
+        "enabled": string;
+        /**
+         * エンドポイントのベースURL
+         */
+        "baseUrl": string;
+        /**
+         * 例: https://api.openai.com/v1 や http://ollama.local:11434/v1 (末尾の /chat/completions は不要)
+         */
+        "baseUrlCaption": string;
+        /**
+         * 非公開のノートやプロフィールを含む原文がこのURLへ送信されます。信頼できる提供者にだけ接続してください。
+         */
+        "providerPrivacyWarning": string;
+        /**
+         * APIキー
+         */
+        "apiKey": string;
+        /**
+         * 設定済み
+         */
+        "apiKeySet": string;
+        /**
+         * 空のまま保存すると既存のキーを維持します。
+         */
+        "apiKeyCaption": string;
+        /**
+         * キーを削除
+         */
+        "deleteApiKey": string;
+        /**
+         * APIキーを削除しますか？
+         */
+        "deleteApiKeyConfirm": string;
+        /**
+         * モデル
+         */
+        "model": string;
+        /**
+         * 追加パラメーター (JSON)
+         */
+        "extraParams": string;
+        /**
+         * リクエストにそのまま追加されます。上の設定と重なるキーはこちらが優先されます。messages は指定できません。
+         */
+        "extraParamsOverrideNote": string;
+        /**
+         * 追加パラメーターがJSONとして解釈できません。
+         */
+        "extraParamsInvalidJson": string;
+        /**
+         * システムプロンプト
+         */
+        "systemPrompt": string;
+        /**
+         * LLMに渡す翻訳の指示。{targetLang} は翻訳先の言語コードに置き換わります。出力形式 (Output) の節を変えると翻訳が失敗することがあります。
+         */
+        "systemPromptCaption": ParameterizedString<"targetLang">;
+        /**
+         * 構造化出力 (response_format: json_schema) を使う
+         */
+        "structuredOutput": string;
+        /**
+         * LLMリクエストのタイムアウト (ミリ秒)
+         */
+        "timeoutMs": string;
+        /**
+         * 同時LLM呼び出し数の上限
+         */
+        "maxConcurrency": string;
+        /**
+         * 出力トークン上限のキー名
+         */
+        "maxTokensParam": string;
+        /**
+         * 1件あたりの原文の最大文字数
+         */
+        "maxInputLength": string;
+        /**
+         * 1回の呼び出しに含める原文の合計文字数の上限
+         */
+        "batchMaxChars": string;
+        /**
+         * 1回の呼び出しに含める件数の上限
+         */
+        "batchMaxItems": string;
+        /**
+         * まとめて送ると速く効率的です。1にすると1件ずつ独立して翻訳します。
+         */
+        "batchMaxItems_description": string;
+        /**
+         * 表示言語で書かれた文章は翻訳しない
+         */
+        "heuristicGate": string;
+        /**
+         * 文字の種類で判定します。例: 表示言語が韓国語なら、ハングルだけの文章は翻訳しません。
+         */
+        "heuristicGate_description": string;
+        /**
+         * キャッシュの保持日数 (0で無期限)
+         */
+        "cacheRetentionDays": string;
+        /**
+         * 保存しました
+         */
+        "saved": string;
+        /**
+         * テスト翻訳
+         */
+        "testTranslation": string;
+        /**
+         * 原文
+         */
+        "testText": string;
+        /**
+         * 翻訳先の言語
+         */
+        "targetLang": string;
+        /**
+         * 翻訳する
+         */
+        "runTest": string;
+        /**
+         * 所要時間
+         */
+        "latency": string;
+        /**
+         * 生のレスポンス
+         */
+        "rawResponse": string;
+        /**
+         * 結果
+         */
+        "result": string;
+        /**
+         * 翻訳の必要なし
+         */
+        "noTranslationNeeded": string;
+        /**
+         * 統計
+         */
+        "stats": string;
+        /**
+         * キャッシュ行数
+         */
+        "cacheRows": string;
+        /**
+         * 判定で省略した件数
+         */
+        "gateSkipped": string;
+        /**
+         * キャッシュ命中数
+         */
+        "cacheHits": string;
+        /**
+         * LLMへ送った件数
+         */
+        "llmItems": string;
+        /**
+         * LLM呼び出し回数
+         */
+        "llmCalls": string;
+        /**
+         * LLM失敗回数
+         */
+        "llmFailures": string;
+        /**
+         * 判定による節約率
+         */
+        "gateSavingRate": string;
+        /**
+         * キャッシュ命中率
+         */
+        "cacheHitRate": string;
+        /**
+         * キャッシュ
+         */
+        "cache": string;
+        /**
+         * すべて削除
+         */
+        "clearAll": string;
+        /**
+         * 翻訳キャッシュをすべて削除しますか？
+         */
+        "clearAllConfirm": string;
+        /**
+         * 指定日数より古いものを削除
+         */
+        "clearOlderThan": string;
+        /**
+         * モデル名で削除
+         */
+        "clearByModel": string;
+        /**
+         * ノートIDで削除
+         */
+        "clearByNoteId": string;
+        /**
+         * {n}件削除しました
+         */
+        "cleared": ParameterizedString<"n">;
+        /**
+         * 翻訳
+         */
+        "settingsFolder": string;
+        /**
+         * タイムラインのノートを自動で翻訳する
+         */
+        "autoNotes": string;
+        /**
+         * 他言語のノートを翻訳して原文の下に表示します。
+         */
+        "autoNotes_description": string;
+        /**
+         * ユーザー名の訳を併記する
+         */
+        "userNames": string;
+        /**
+         * 名前の後ろに訳を表示します。
+         */
+        "userNames_description": string;
+        /**
+         * プロフィールを自動で翻訳する
+         */
+        "profiles": string;
+        /**
+         * プロフィールページの自己紹介と追加情報を翻訳して表示します。
+         */
+        "profiles_description": string;
+        /**
+         * 翻訳に失敗しました。しばらくしてからもう一度お試しください。
+         */
+        "translationFailed": string;
+    };
     /**
      * 雪を降らせる
      */

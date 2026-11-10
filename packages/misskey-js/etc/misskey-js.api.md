@@ -266,6 +266,24 @@ type AdminInviteListRequest = operations['admin___invite___list']['requestBody']
 type AdminInviteListResponse = operations['admin___invite___list']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminKyunetTranslationClearCacheRequest = operations['admin___kyunet___translation___clear-cache']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminKyunetTranslationClearCacheResponse = operations['admin___kyunet___translation___clear-cache']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminKyunetTranslationShowResponse = operations['admin___kyunet___translation___show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminKyunetTranslationTestRequest = operations['admin___kyunet___translation___test']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminKyunetTranslationTestResponse = operations['admin___kyunet___translation___test']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminKyunetTranslationUpdateRequest = operations['admin___kyunet___translation___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
 type AdminMetaResponse = operations['admin___meta']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
@@ -1664,6 +1682,12 @@ declare namespace entities {
         AdminInviteCreateResponse,
         AdminInviteListRequest,
         AdminInviteListResponse,
+        AdminKyunetTranslationClearCacheRequest,
+        AdminKyunetTranslationClearCacheResponse,
+        AdminKyunetTranslationShowResponse,
+        AdminKyunetTranslationTestRequest,
+        AdminKyunetTranslationTestResponse,
+        AdminKyunetTranslationUpdateRequest,
         AdminMetaResponse,
         AdminPromoCreateRequest,
         AdminQueueClearRequest,
@@ -2087,6 +2111,8 @@ declare namespace entities {
         InviteLimitResponse,
         InviteListRequest,
         InviteListResponse,
+        KyunetTranslateRequest,
+        KyunetTranslateResponse,
         MetaRequest,
         MetaResponse,
         MiauthGenTokenRequest,
@@ -2940,6 +2966,12 @@ type IWebhooksTestRequest = operations['i___webhooks___test']['requestBody']['co
 
 // @public (undocumented)
 type IWebhooksUpdateRequest = operations['i___webhooks___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type KyunetTranslateRequest = operations['kyunet___translate']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type KyunetTranslateResponse = operations['kyunet___translate']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type MeDetailed = components['schemas']['MeDetailed'];

@@ -11,6 +11,7 @@ import type { MenuItem } from '@/types/menu.js';
 import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
+import { translateNoteWith, isKyunetTranslationAvailable } from '@/composables/use-kyunet-translation.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
@@ -321,6 +322,11 @@ export function getNoteMenu(props: {
 
 	async function translate(): Promise<void> {
 		if (props.translation.value != null) return;
+		// kyunet: prefer the fork-only LLM route over DeepL / the browser translator when the server offers it
+		if (isKyunetTranslationAvailable()) {
+			await translateNoteWith(appearNote, props.translation, props.translating);
+			return;
+		}
 
 		let text = appearNote.text ?? '';
 		if (appearNote.cw != null) {
@@ -426,7 +432,8 @@ export function getNoteMenu(props: {
 			});
 		}
 
-		if ((prefer.s['experimental.enableWebTranslatorApi'] && isInBrowserTranslationAvailable) || ($i.policies.canUseTranslator && instance.translatorAvailable)) {
+		// kyunet: also show the item when the fork-only LLM route is available (upstream: browser translator || DeepL only)
+		if (isKyunetTranslationAvailable() || (prefer.s['experimental.enableWebTranslatorApi'] && isInBrowserTranslationAvailable) || ($i.policies.canUseTranslator && instance.translatorAvailable)) {
 			menuItems.push({
 				icon: 'ti ti-language-hiragana',
 				text: i18n.ts.translate,

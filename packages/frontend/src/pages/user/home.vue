@@ -85,6 +85,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<MkOmit>
 								<Mfm v-if="user.description" :text="user.description" :isNote="false" :author="user" class="_selectable"/>
 								<p v-else class="empty">{{ i18n.ts.noAccountDescription }}</p>
+								<!-- kyunet: LLM translation of the bio, same look as the note translation box -->
+								<div v-if="kyunetDescription" :class="$style.kyunetTranslation">
+									<b>{{ i18n.tsx.translatedFrom({ x: kyunetLangNames(kyunetDescription.sourceLangs) }) }}: </b>
+									<Mfm :text="kyunetDescription.text" :isNote="false" :author="user" class="_selectable"/>
+								</div>
 							</MkOmit>
 						</div>
 						<div class="fields system">
@@ -105,10 +110,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<dl v-for="(field, i) in user.fields" :key="i" class="field">
 								<dt class="name">
 									<Mfm :text="field.name" :author="user" :plain="true" :colored="false" class="_selectable"/>
+									<!-- kyunet: translated field name -->
+									<div v-if="kyunetFieldNames[i]" :class="$style.kyunetFieldTranslation"><Mfm :text="kyunetFieldNames[i]!" :author="user" :plain="true" :colored="false"/></div>
 								</dt>
 								<dd class="value">
 									<Mfm :text="field.value" :author="user" :colored="false" class="_selectable"/>
 									<i v-if="user.verifiedLinks.includes(field.value)" v-tooltip:dialog="i18n.ts.verifiedLink" class="ti ti-circle-check" :class="$style.verifiedLink"></i>
+									<!-- kyunet: translated field value -->
+									<div v-if="kyunetFieldValues[i]" :class="$style.kyunetFieldTranslation"><Mfm :text="kyunetFieldValues[i]!" :author="user" :colored="false"/></div>
 								</dd>
 							</dl>
 						</div>
@@ -187,6 +196,12 @@ import MkSparkle from '@/components/MkSparkle.vue';
 import { prefer } from '@/preferences.js';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';
 import { isBirthday } from '@/utility/is-birthday.js';
+// kyunet: fork-only LLM translation of bio / fields
+import { shallowRef } from 'vue';
+import type { Ref } from 'vue';
+import { useKyunetTranslation, kyunetTargetLang, kyunetLangNames } from '@/composables/use-kyunet-translation.js';
+import type { KyunetTranslationResult } from '@/composables/use-kyunet-translation.js';
+import { isObviouslyTargetLang } from '@/utility/kyunet-script-gate.js';
 import type XTimeline_TypeReferenceOnly from './index.timeline.vue';
 
 function calcAge(birthdate: string): number {
@@ -256,6 +271,37 @@ const style = computed(() => {
 		};
 	};
 });
+
+// kyunet: request bio / field translations when the preference is on; nothing is requested for obviously-target-language text
+// (shallowRef holding plain objects of refs: Vue's ref() typings would unwrap a nested Ref)
+type KyunetReq = { result: Ref<KyunetTranslationResult | null> };
+const kyunetDescriptionRef = shallowRef<KyunetReq | null>(null);
+const kyunetFieldNameRefs = shallowRef<(KyunetReq | null)[]>([]);
+const kyunetFieldValueRefs = shallowRef<(KyunetReq | null)[]>([]);
+
+function kyunetRequestProfile(): void {
+	const kt = useKyunetTranslation();
+	if (!prefer.s['kyunetTranslation.profiles'] || !kt.available.value) {
+		kyunetDescriptionRef.value = null;
+		kyunetFieldNameRefs.value = [];
+		kyunetFieldValueRefs.value = [];
+		return;
+	}
+	const lang = kyunetTargetLang();
+	const want = (text: string | null | undefined) => text != null && text.trim() !== '' && !isObviouslyTargetLang(text, lang);
+	kyunetDescriptionRef.value = want(props.user.description) ? { result: kt.request({ type: 'user_description', id: props.user.id }) } : null;
+	kyunetFieldNameRefs.value = props.user.fields.map((f, index) => want(f.name) ? { result: kt.request({ type: 'user_field_name', id: props.user.id, index }) } : null);
+	kyunetFieldValueRefs.value = props.user.fields.map((f, index) => want(f.value) ? { result: kt.request({ type: 'user_field_value', id: props.user.id, index }) } : null);
+}
+
+watch(() => [props.user.id, props.user.description, props.user.fields] as const, kyunetRequestProfile, { immediate: true, deep: true });
+
+const kyunetDescription = computed(() => {
+	const res = kyunetDescriptionRef.value?.result.value;
+	return res != null && res.status === 'ok' && res.text != null ? { text: res.text, sourceLangs: res.sourceLangs } : null;
+});
+const kyunetFieldNames = computed(() => kyunetFieldNameRefs.value.map(r => { const res = r?.result.value; return res != null && res.status === 'ok' ? res.text : null; }));
+const kyunetFieldValues = computed(() => kyunetFieldValueRefs.value.map(r => { const res = r?.result.value; return res != null && res.status === 'ok' ? res.text : null; }));
 
 const age = computed(() => {
 	return props.user.birthday ? calcAge(props.user.birthday) : NaN;
@@ -790,5 +836,18 @@ onDeactivated(disposeBannerParallaxResizeObserver);
 .verifiedLink {
 	margin-left: 4px;
 	color: var(--MI_THEME-success);
+}
+
+// kyunet: translation boxes on the profile page
+.kyunetTranslation {
+	border: solid 0.5px var(--MI_THEME-divider);
+	border-radius: var(--MI-radius);
+	padding: 12px;
+	margin-top: 8px;
+}
+
+.kyunetFieldTranslation {
+	opacity: 0.7;
+	font-size: 90%;
 }
 </style>

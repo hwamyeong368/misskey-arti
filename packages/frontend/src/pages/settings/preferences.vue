@@ -230,6 +230,33 @@ SPDX-License-Identifier: AGPL-3.0-only
 									</MkPreferenceContainer>
 								</SearchMarker>
 
+								<!-- kyunet: fork-only LLM translation toggles -->
+								<SearchMarker :keywords="['translate', 'translation', 'llm']">
+									<MkFolder>
+										<template #label><SearchLabel>{{ i18n.ts._kyunetTranslation.settingsFolder }}</SearchLabel></template>
+										<div class="_gaps_m">
+											<MkPreferenceContainer k="kyunetTranslation.autoNotes">
+												<MkSwitch v-model="kyunetAutoNotes">
+													<template #label><SearchLabel>{{ i18n.ts._kyunetTranslation.autoNotes }}</SearchLabel></template>
+													<template #caption>{{ i18n.ts._kyunetTranslation.autoNotes_description }}</template>
+												</MkSwitch>
+											</MkPreferenceContainer>
+											<MkPreferenceContainer k="kyunetTranslation.userNames">
+												<MkSwitch v-model="kyunetUserNames">
+													<template #label><SearchLabel>{{ i18n.ts._kyunetTranslation.userNames }}</SearchLabel></template>
+													<template #caption>{{ i18n.ts._kyunetTranslation.userNames_description }}</template>
+												</MkSwitch>
+											</MkPreferenceContainer>
+											<MkPreferenceContainer k="kyunetTranslation.profiles">
+												<MkSwitch v-model="kyunetProfiles">
+													<template #label><SearchLabel>{{ i18n.ts._kyunetTranslation.profiles }}</SearchLabel></template>
+													<template #caption>{{ i18n.ts._kyunetTranslation.profiles_description }}</template>
+												</MkSwitch>
+											</MkPreferenceContainer>
+										</div>
+									</MkFolder>
+								</SearchMarker>
+
 								<SearchMarker :keywords="['reaction', 'count', 'show']">
 									<MkPreferenceContainer k="showReactionsCount">
 										<MkSwitch v-model="showReactionsCount">
@@ -948,6 +975,10 @@ const serverDisconnectedBehavior = prefer.model('serverDisconnectedBehavior');
 const hemisphere = prefer.model('hemisphere');
 const showNoteActionsOnlyHover = prefer.model('showNoteActionsOnlyHover');
 const showClipButtonInNoteFooter = prefer.model('showClipButtonInNoteFooter');
+// kyunet: fork-only LLM translation preferences
+const kyunetAutoNotes = prefer.model('kyunetTranslation.autoNotes');
+const kyunetUserNames = prefer.model('kyunetTranslation.userNames');
+const kyunetProfiles = prefer.model('kyunetTranslation.profiles');
 const collapseRenotes = prefer.model('collapseRenotes');
 const advancedMfm = prefer.model('advancedMfm');
 const showReactionsCount = prefer.model('showReactionsCount');

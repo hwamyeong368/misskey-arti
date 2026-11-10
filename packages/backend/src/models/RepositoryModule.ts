@@ -79,6 +79,9 @@ import {
 	MiUserProfile,
 	MiUserPublickey,
 	MiUserSecurityKey,
+	// kyunet: fork-only LLM translation tables (added to the import list)
+	MiKyunetTranslationSetting,
+	MiKyunetTranslation,
 	MiWebhook,
 	MiChatMessage,
 	MiChatRoom,
@@ -188,6 +191,19 @@ const $userPendingsRepository: Provider = {
 const $userSecurityKeysRepository: Provider = {
 	provide: DI.userSecurityKeysRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiUserSecurityKey).extend(miRepository as MiRepository<MiUserSecurityKey>),
+	inject: [DI.db],
+};
+
+// kyunet: fork-only LLM translation repositories
+const $kyunetTranslationSettingsRepository: Provider = {
+	provide: DI.kyunetTranslationSettingsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiKyunetTranslationSetting).extend(miRepository as MiRepository<MiKyunetTranslationSetting>),
+	inject: [DI.db],
+};
+
+const $kyunetTranslationsRepository: Provider = {
+	provide: DI.kyunetTranslationsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiKyunetTranslation).extend(miRepository as MiRepository<MiKyunetTranslation>),
 	inject: [DI.db],
 };
 
@@ -571,6 +587,8 @@ const $reversiGamesRepository: Provider = {
 		$userKeypairsRepository,
 		$userPendingsRepository,
 		$userSecurityKeysRepository,
+		$kyunetTranslationSettingsRepository,
+		$kyunetTranslationsRepository,
 		$userPublickeysRepository,
 		$userListsRepository,
 		$userListFavoritesRepository,
@@ -650,6 +668,8 @@ const $reversiGamesRepository: Provider = {
 		$userKeypairsRepository,
 		$userPendingsRepository,
 		$userSecurityKeysRepository,
+		$kyunetTranslationSettingsRepository,
+		$kyunetTranslationsRepository,
 		$userPublickeysRepository,
 		$userListsRepository,
 		$userListFavoritesRepository,

@@ -84,6 +84,9 @@ import { MiUserPending } from '@/models/UserPending.js';
 import { MiUserProfile } from '@/models/UserProfile.js';
 import { MiUserPublickey } from '@/models/UserPublickey.js';
 import { MiUserSecurityKey } from '@/models/UserSecurityKey.js';
+// kyunet: fork-only LLM translation tables
+import { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
+import { MiKyunetTranslation } from '@/models/KyunetTranslation.js';
 import { MiWebhook } from '@/models/Webhook.js';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 
@@ -159,6 +162,9 @@ export {
 	MiUserProfile,
 	MiUserPublickey,
 	MiUserSecurityKey,
+	// kyunet: fork-only LLM translation tables
+	MiKyunetTranslationSetting,
+	MiKyunetTranslation,
 	MiWebhook,
 	MiSystemWebhook,
 	MiChannel,
@@ -240,6 +246,9 @@ export type UserPendingsRepository = Repository<MiUserPending> & MiRepository<Mi
 export type UserProfilesRepository = Repository<MiUserProfile> & MiRepository<MiUserProfile>;
 export type UserPublickeysRepository = Repository<MiUserPublickey> & MiRepository<MiUserPublickey>;
 export type UserSecurityKeysRepository = Repository<MiUserSecurityKey> & MiRepository<MiUserSecurityKey>;
+// kyunet: fork-only LLM translation repositories
+export type KyunetTranslationSettingsRepository = Repository<MiKyunetTranslationSetting> & MiRepository<MiKyunetTranslationSetting>;
+export type KyunetTranslationsRepository = Repository<MiKyunetTranslation> & MiRepository<MiKyunetTranslation>;
 export type WebhooksRepository = Repository<MiWebhook> & MiRepository<MiWebhook>;
 export type SystemWebhooksRepository = Repository<MiSystemWebhook> & MiRepository<MiWebhook>;
 export type ChannelsRepository = Repository<MiChannel> & MiRepository<MiChannel>;

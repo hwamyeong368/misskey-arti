@@ -491,6 +491,11 @@ export const ROUTE_DEF = [{
 		name: 'external-services',
 		component: page(() => import('@/pages/admin/external-services.vue')),
 	}, {
+		// kyunet: fork-only LLM translation admin page
+		path: '/kyunet-translation',
+		name: 'kyunet-translation',
+		component: page(() => import('@/pages/admin/kyunet-translation.vue')),
+	}, {
 		path: '/performance',
 		name: 'performance',
 		component: page(() => import('@/pages/admin/performance.vue')),

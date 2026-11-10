@@ -113,6 +113,11 @@ export * as 'admin/unset-user-banner' from './endpoints/admin/unset-user-banner.
 export * as 'admin/unsuspend-user' from './endpoints/admin/unsuspend-user.js';
 export * as 'admin/update-abuse-user-report' from './endpoints/admin/update-abuse-user-report.js';
 export * as 'admin/update-meta' from './endpoints/admin/update-meta.js';
+// kyunet: fork-only LLM translation admin endpoints
+export * as 'admin/kyunet/translation/show' from './endpoints/admin/kyunet/translation/show.js';
+export * as 'admin/kyunet/translation/update' from './endpoints/admin/kyunet/translation/update.js';
+export * as 'admin/kyunet/translation/test' from './endpoints/admin/kyunet/translation/test.js';
+export * as 'admin/kyunet/translation/clear-cache' from './endpoints/admin/kyunet/translation/clear-cache.js';
 export * as 'admin/update-proxy-account' from './endpoints/admin/update-proxy-account.js';
 export * as 'admin/update-user-note' from './endpoints/admin/update-user-note.js';
 export * as 'announcements' from './endpoints/announcements.js';
@@ -352,6 +357,8 @@ export * as 'notes/thread-muting/create' from './endpoints/notes/thread-muting/c
 export * as 'notes/thread-muting/delete' from './endpoints/notes/thread-muting/delete.js';
 export * as 'notes/timeline' from './endpoints/notes/timeline.js';
 export * as 'notes/translate' from './endpoints/notes/translate.js';
+// kyunet: fork-only LLM translation endpoint
+export * as 'kyunet/translate' from './endpoints/kyunet/translate.js';
 export * as 'notes/unrenote' from './endpoints/notes/unrenote.js';
 export * as 'notes/update' from './endpoints/notes/update.js';
 export * as 'notes/user-list-timeline' from './endpoints/notes/user-list-timeline.js';

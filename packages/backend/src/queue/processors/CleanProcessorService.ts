@@ -12,6 +12,8 @@ import { bindThis } from '@/decorators.js';
 import { IdService } from '@/core/IdService.js';
 import type { Config } from '@/config.js';
 import { ReversiService } from '@/core/ReversiService.js';
+// kyunet: fork-only LLM translation cache cleanup
+import { KyunetTranslationService } from '@/core/KyunetTranslationService.js';
 import { QueueLoggerService } from '../QueueLoggerService.js';
 import type * as Bull from 'bullmq';
 
@@ -35,6 +37,8 @@ export class CleanProcessorService {
 		private queueLoggerService: QueueLoggerService,
 		private reversiService: ReversiService,
 		private idService: IdService,
+		// kyunet: fork-only LLM translation cache cleanup
+		private kyunetTranslationService: KyunetTranslationService,
 	) {
 		this.logger = this.queueLoggerService.logger.createSubLogger('clean');
 	}
@@ -68,6 +72,13 @@ export class CleanProcessorService {
 		}
 
 		this.reversiService.cleanOutdatedGames();
+
+		// kyunet: drop LLM translation cache rows older than cacheRetentionDays (no-op when 0); a failure must not fail the clean job
+		try {
+			await this.kyunetTranslationService.cleanExpiredCache();
+		} catch (err) {
+			this.logger.warn(`LLM translation cache cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
 
 		this.logger.succ('Cleaned.');
 	}
