@@ -3470,3 +3470,5 @@ _qr:
   scanFile: "Scan image from device"
   raw: "Text"
   mfm: "MFM"
+
+snowEffect: "Let it snow"

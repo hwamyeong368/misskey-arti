@@ -3728,3 +3728,5 @@ _voiceCall:
   inCallCount: "{n}人が通話中"
   moveChatLeft: "チャットを左に移動"
   moveChatRight: "チャットを右に移動"
+
+snowEffect: "雪を降らせる"

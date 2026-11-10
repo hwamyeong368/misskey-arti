@@ -13947,4 +13947,8 @@ export interface Locale extends ILocale {
          */
         "moveChatRight": string;
     };
+    /**
+     * 雪を降らせる
+     */
+    "snowEffect": string;
 }

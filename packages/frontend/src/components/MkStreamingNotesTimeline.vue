@@ -112,6 +112,7 @@ if (props.src === 'antenna') {
 			antennaId: props.antenna!,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'home') {
 	paginator = markRaw(new Paginator('notes/timeline', {
@@ -120,6 +121,7 @@ if (props.src === 'antenna') {
 			withFiles: props.onlyFiles ? true : undefined,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'local') {
 	paginator = markRaw(new Paginator('notes/local-timeline', {
@@ -129,6 +131,7 @@ if (props.src === 'antenna') {
 			withFiles: props.onlyFiles ? true : undefined,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'social') {
 	paginator = markRaw(new Paginator('notes/hybrid-timeline', {
@@ -138,6 +141,7 @@ if (props.src === 'antenna') {
 			withFiles: props.onlyFiles ? true : undefined,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'global') {
 	paginator = markRaw(new Paginator('notes/global-timeline', {
@@ -146,10 +150,12 @@ if (props.src === 'antenna') {
 			withFiles: props.onlyFiles ? true : undefined,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'mentions') {
 	paginator = markRaw(new Paginator('notes/mentions', {
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'directs') {
 	paginator = markRaw(new Paginator('notes/mentions', {
@@ -157,6 +163,7 @@ if (props.src === 'antenna') {
 			visibility: 'specified',
 		},
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'list') {
 	paginator = markRaw(new Paginator('notes/user-list-timeline', {
@@ -166,6 +173,7 @@ if (props.src === 'antenna') {
 			listId: props.list!,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'channel') {
 	paginator = markRaw(new Paginator('channels/timeline', {
@@ -173,6 +181,7 @@ if (props.src === 'antenna') {
 			channelId: props.channel!,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else if (props.src === 'role') {
 	paginator = markRaw(new Paginator('roles/notes', {
@@ -180,6 +189,7 @@ if (props.src === 'antenna') {
 			roleId: props.role!,
 		})),
 		useShallowRef: true,
+		insertByIdOrder: true,
 	}));
 } else {
 	throw new Error('Unrecognized timeline type: ' + props.src);
@@ -199,7 +209,8 @@ function isTop() {
 	if (scrollContainer == null) return true;
 	if (rootEl.value == null) return true;
 	const scrollTop = scrollContainer.scrollTop;
-	const tlTop = rootEl.value.offsetTop - scrollContainer.offsetTop;
+	// .new2 の負の margin-top が rootEl の外へ相殺されて offsetTop が負になることがあるので、0 未満にはしない
+	const tlTop = Math.max(0, rootEl.value.offsetTop - scrollContainer.offsetTop);
 	return scrollTop <= tlTop;
 }
 

@@ -3613,3 +3613,5 @@ _voiceCall:
   inCallCount: "{n}명 통화 중"
   moveChatLeft: "채팅을 왼쪽으로 옮기기"
   moveChatRight: "채팅을 오른쪽으로 옮기기"
+
+snowEffect: "눈 내리기"
