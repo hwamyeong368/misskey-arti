@@ -384,6 +384,9 @@ export const PREF_DEF = definePreferences({
 	enableSeasonalScreenEffect: {
 		default: false,
 	},
+	enableSnowEffect: {
+		default: false,
+	},
 	enableHorizontalSwipe: {
 		default: false,
 	},

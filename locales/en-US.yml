@@ -3533,3 +3533,4 @@ _kyunetTranslation:
   profiles: "Translate profiles automatically"
   profiles_description: "Translates the bio and the additional fields on profile pages."
   translationFailed: "Translation failed. Please try again later."
+snowEffect: "Let it snow"

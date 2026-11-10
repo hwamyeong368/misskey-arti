@@ -3676,3 +3676,4 @@ _kyunetTranslation:
   profiles: "프로필을 자동으로 번역"
   profiles_description: "프로필 페이지의 소개와 추가 정보를 번역해 표시합니다."
   translationFailed: "번역에 실패했습니다. 잠시 후 다시 시도해 주세요."
+snowEffect: "눈 내리기"

@@ -29,6 +29,7 @@ import { prefer } from '@/preferences.js';
 import { updateCurrentAccount } from '@/accounts.js';
 import { unisonReload } from '@/utility/unison-reload.js';
 import { isBirthday } from '@/utility/is-birthday.js';
+import { watchSnowEffect } from '@/utility/snow-effect-watcher.js';
 
 export async function mainBoot() {
 	const { isClientUpdated, lastVersion } = await common(async () => {
@@ -96,6 +97,8 @@ export async function mainBoot() {
 		// console.error(error);
 		console.error('Failed to initialise the seasonal screen effect canvas context:', error);
 	}
+
+	watchSnowEffect();
 
 	if ($i) {
 		store.loaded.then(async () => {

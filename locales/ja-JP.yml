@@ -3791,3 +3791,4 @@ _kyunetTranslation:
   profiles: "プロフィールを自動で翻訳する"
   profiles_description: "プロフィールページの自己紹介と追加情報を翻訳して表示します。"
   translationFailed: "翻訳に失敗しました。しばらくしてからもう一度お試しください。"
+snowEffect: "雪を降らせる"

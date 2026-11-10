@@ -14193,4 +14193,8 @@ export interface Locale extends ILocale {
          */
         "translationFailed": string;
     };
+    /**
+     * 雪を降らせる
+     */
+    "snowEffect": string;
 }
