@@ -38,6 +38,10 @@ import type { DI as DIType } from '@/di.js';
 import type { ExtractInjectedType } from '@/types/misc.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { WordMuteResult } from '@/utility/check-word-mute.js';
+// kyunet: fork-only LLM translation (footer button, toggle, auto-translate)
+import { translateNoteWith, isKyunetTranslationAvailable, kyunetTargetLang, kyunetLangNames, noteSourceText, useKyunetTranslation } from '@/composables/use-kyunet-translation.js';
+import type { KyunetTranslationResult } from '@/composables/use-kyunet-translation.js';
+import { isObviouslyTargetLang } from '@/utility/kyunet-script-gate.js';
 
 export interface UseNoteProps {
 	note: Misskey.entities.Note;
@@ -147,6 +151,41 @@ export function useNote(
 	const isDeleted = ref(false);
 	const translating = ref(false);
 	const translation = ref<Misskey.entities.NotesTranslateResponse | null>(null);
+
+	// kyunet: manual LLM translation entry used by the footer button (toggle) and exposed to the components
+	const kyunetSourceText = noteSourceText(appearNote);
+	const kyunetTranslateButtonVisible = !props.mock
+		&& isKyunetTranslationAvailable()
+		&& kyunetSourceText.trim() !== ''
+		&& !isObviouslyTargetLang(kyunetSourceText, kyunetTargetLang());
+
+	async function kyunetTranslate(): Promise<void> {
+		if (props.mock) return;
+		await translateNoteWith(appearNote, translation, translating);
+	}
+
+	// kyunet: automatic LLM translation on mount (spec 7.3). No spinner, failures are silent, own notes are skipped,
+	// and obviously-target-language notes never leave the client.
+	if (
+		!props.mock
+		&& prefer.s['kyunetTranslation.autoNotes']
+		&& kyunetTranslateButtonVisible
+		&& $i != null && appearNote.userId !== $i.id
+	) {
+		const auto = useKyunetTranslation().request({ type: 'note', id: appearNote.id });
+		const applyAuto = (res: KyunetTranslationResult | null): boolean => {
+			if (res == null) return false;
+			if (res.status === 'ok' && res.text != null && translation.value == null) {
+				translation.value = { sourceLang: kyunetLangNames(res.sourceLangs), text: res.text };
+			}
+			return true;
+		};
+		if (!applyAuto(auto.value)) {
+			const stopAuto = watch(auto, (res) => {
+				if (applyAuto(res)) stopAuto();
+			});
+		}
+	}
 
 	// ミュート判定
 	// mutedはミュート解除の操作で書き換わるのでrefだが、hardMutedは解除できないのでリアクティブにしない
@@ -441,6 +480,8 @@ export function useNote(
 		isDeleted,
 		translating,
 		translation,
+		// kyunet: fork-only LLM translation
+		kyunetTranslateButtonVisible,
 		muted,
 		hardMuted,
 		collapsed,
@@ -464,6 +505,8 @@ export function useNote(
 		showMenu,
 		clip,
 		showRenoteMenu,
+		// kyunet: fork-only LLM translation
+		kyunetTranslate,
 		focus,
 		blur,
 	};

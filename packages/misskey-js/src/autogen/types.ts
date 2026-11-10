@@ -485,6 +485,42 @@ export type paths = {
          */
         post: operations['admin___invite___list'];
     };
+    '/admin/kyunet/translation/clear-cache': {
+        /**
+         * admin/kyunet/translation/clear-cache
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:meta*
+         */
+        post: operations['admin___kyunet___translation___clear-cache'];
+    };
+    '/admin/kyunet/translation/show': {
+        /**
+         * admin/kyunet/translation/show
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:admin:meta*
+         */
+        post: operations['admin___kyunet___translation___show'];
+    };
+    '/admin/kyunet/translation/test': {
+        /**
+         * admin/kyunet/translation/test
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:meta*
+         */
+        post: operations['admin___kyunet___translation___test'];
+    };
+    '/admin/kyunet/translation/update': {
+        /**
+         * admin/kyunet/translation/update
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:meta*
+         */
+        post: operations['admin___kyunet___translation___update'];
+    };
     '/admin/meta': {
         /**
          * admin/meta
@@ -3056,6 +3092,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *read:invite-codes*
          */
         post: operations['invite___list'];
+    };
+    '/kyunet/translate': {
+        /**
+         * kyunet/translate
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['kyunet___translate'];
     };
     '/meta': {
         /**
@@ -5685,6 +5730,7 @@ export type components = {
             enableEmail: boolean;
             enableServiceWorker: boolean;
             translatorAvailable: boolean;
+            llmTranslatorAvailable: boolean;
             sentryForFrontend: {
                 options: {
                     dsn: string;
@@ -9640,6 +9686,318 @@ export interface operations {
                 };
                 content: {
                     'application/json': components['schemas']['InviteCode'][];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'admin___kyunet___translation___clear-cache': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    all?: boolean;
+                    olderThanDays?: number;
+                    model?: string;
+                    /** Format: misskey:id */
+                    noteId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        deleted: number;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___kyunet___translation___show: {
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        enabled: boolean;
+                        baseUrl: string | null;
+                        apiKeySet: boolean;
+                        model: string | null;
+                        extraParams: {
+                            [key: string]: unknown;
+                        };
+                        systemPrompt: string | null;
+                        structuredOutput: boolean;
+                        timeoutMs: number;
+                        maxConcurrency: number;
+                        /** @enum {string} */
+                        maxTokensParam: 'max_completion_tokens' | 'max_tokens';
+                        maxInputLength: number;
+                        batchMaxChars: number;
+                        batchMaxItems: number;
+                        heuristicGate: boolean;
+                        cacheRetentionDays: number;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        defaultSystemPrompt: string;
+                        stats: {
+                            cacheRows: number;
+                            gateSkipped: number;
+                            cacheHits: number;
+                            llmItems: number;
+                            llmCalls: number;
+                            llmFailures: number;
+                        };
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___kyunet___translation___test: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    text: string;
+                    targetLang: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        ok: boolean;
+                        latencyMs: number;
+                        text: string | null;
+                        needsTranslation: boolean | null;
+                        sourceLangs: string[] | null;
+                        error: string | null;
+                        raw: string | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    admin___kyunet___translation___update: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    enabled?: boolean;
+                    baseUrl?: string | null;
+                    apiKey?: string;
+                    model?: string | null;
+                    extraParams?: {
+                        [key: string]: unknown;
+                    };
+                    systemPrompt?: string | null;
+                    structuredOutput?: boolean;
+                    timeoutMs?: number;
+                    maxConcurrency?: number;
+                    /** @enum {string} */
+                    maxTokensParam?: 'max_completion_tokens' | 'max_tokens';
+                    maxInputLength?: number;
+                    batchMaxChars?: number;
+                    batchMaxItems?: number;
+                    heuristicGate?: boolean;
+                    cacheRetentionDays?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (without any results) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
                 };
             };
             /** @description Client error */
@@ -29976,6 +30334,96 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    kyunet___translate: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    targetLang: string;
+                    /** @default false */
+                    force?: boolean;
+                    items: {
+                        /** @enum {string} */
+                        type: 'note' | 'user_name' | 'user_description' | 'user_field_name' | 'user_field_value';
+                        /** Format: misskey:id */
+                        id: string;
+                        index?: number;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        items: {
+                            /** @enum {string} */
+                            status: 'ok' | 'unavailable' | 'failed';
+                            text: string | null;
+                            sourceLangs: string[];
+                        }[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

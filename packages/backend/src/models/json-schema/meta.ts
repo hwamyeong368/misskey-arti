@@ -218,6 +218,11 @@ export const packedMetaLiteSchema = {
 			type: 'boolean',
 			optional: false, nullable: false,
 		},
+		// kyunet: fork-only LLM translation availability flag
+		llmTranslatorAvailable: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 		sentryForFrontend: {
 			type: 'object',
 			optional: false, nullable: true,

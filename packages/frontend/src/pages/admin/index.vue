@@ -220,6 +220,12 @@ const menuDef = computed<SuperMenuDef[]>(() => [{
 		to: '/admin/external-services',
 		active: currentPage.value?.route.name === 'external-services',
 	}, {
+		// kyunet: fork-only LLM translation admin page
+		icon: 'ti ti-language-hiragana',
+		text: i18n.ts._kyunetTranslation.title,
+		to: '/admin/kyunet-translation',
+		active: currentPage.value?.route.name === 'kyunet-translation',
+	}, {
 		icon: 'ti ti-webhook',
 		text: 'Webhook',
 		to: '/admin/system-webhook',

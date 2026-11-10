@@ -156,6 +156,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<button v-if="prefer.s.showClipButtonInNoteFooter" ref="clipButton" :class="$style.footerButton" class="_button" @mousedown.prevent="clip()">
 					<i class="ti ti-paperclip"></i>
 				</button>
+				<!-- kyunet: LLM translate button (fork-only); pressing it again hides the translation -->
+				<button v-if="kyunetTranslateButtonVisible" :class="[$style.footerButton, { [$style.footerButtonActive]: translation != null }]" class="_button" :aria-label="i18n.ts.translate" :aria-pressed="translation != null" @click="kyunetTranslate()">
+					<i class="ti ti-language-hiragana"></i>
+				</button>
 				<button ref="menuButton" :class="$style.footerButton" class="_button" @mousedown.prevent="showMenu()">
 					<i class="ti ti-dots"></i>
 				</button>
@@ -268,6 +272,9 @@ const {
 	showContent,
 	translating,
 	translation,
+	// kyunet: fork-only LLM translation
+	kyunetTranslateButtonVisible,
+	kyunetTranslate,
 	muted,
 	hardMuted,
 	collapsed,

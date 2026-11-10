@@ -61,3 +61,7 @@ Support us with a ⭐ !
 [![Star History Chart](https://api.star-history.com/svg?repos=misskey-dev/misskey&type=Date)](https://star-history.com/#misskey-dev/misskey&Date)
 
 </div>
+
+## 크레딧
+
+- LLM 번역 기능: [kyunet](https://git.kyu.sh/kyush/misskey) `2026.10.0-kyunet.5`

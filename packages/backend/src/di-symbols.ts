@@ -31,6 +31,9 @@ export const DI = {
 	userKeypairsRepository: Symbol('userKeypairsRepository'),
 	userPendingsRepository: Symbol('userPendingsRepository'),
 	userSecurityKeysRepository: Symbol('userSecurityKeysRepository'),
+	// kyunet: fork-only LLM translation repositories
+	kyunetTranslationSettingsRepository: Symbol('kyunetTranslationSettingsRepository'),
+	kyunetTranslationsRepository: Symbol('kyunetTranslationsRepository'),
 	userPublickeysRepository: Symbol('userPublickeysRepository'),
 	userListsRepository: Symbol('userListsRepository'),
 	userListFavoritesRepository: Symbol('userListFavoritesRepository'),

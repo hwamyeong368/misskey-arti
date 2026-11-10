@@ -15,6 +15,8 @@ import { SystemAccountService } from '@/core/SystemAccountService.js';
 import type { Config } from '@/config.js';
 import { DI } from '@/di-symbols.js';
 import { DEFAULT_POLICIES } from '@/core/RoleService.js';
+// kyunet: fork-only LLM translation availability flag
+import { KyunetTranslationSettingService } from '@/core/KyunetTranslationSettingService.js';
 
 @Injectable()
 export class MetaEntityService {
@@ -29,6 +31,9 @@ export class MetaEntityService {
 		private adsRepository: AdsRepository,
 
 		private systemAccountService: SystemAccountService,
+
+		// kyunet: fork-only LLM translation availability flag
+		private kyunetTranslationSettingService: KyunetTranslationSettingService,
 	) { }
 
 	@bindThis
@@ -124,6 +129,8 @@ export class MetaEntityService {
 			enableServiceWorker: instance.enableServiceWorker,
 
 			translatorAvailable: instance.deeplAuthKey != null,
+			// kyunet: true when the fork-only LLM translation route is configured (spec 6.4)
+			llmTranslatorAvailable: this.kyunetTranslationSettingService.isAvailable(),
 
 			serverRules: instance.serverRules,
 
