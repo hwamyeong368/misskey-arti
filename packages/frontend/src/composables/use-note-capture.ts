@@ -94,6 +94,12 @@ function fetchSnapshot(queue: Map<string, { lastAddedAt: number }>, maxRequests 
 
 	if (ids.length === 0) return;
 
+	// kyunet: fix/note-capture-shared-state
+	fetchSnapshotIds(ids);
+}
+
+// kyunet: fix/note-capture-shared-state
+function fetchSnapshotIds(ids: string[]) {
 	for (let i = 0; i < ids.length; i += CAPTURE_MAX) {
 		const chunk = ids.slice(i, i + CAPTURE_MAX);
 		// まとめてリクエストするのではなく、個別にHTTPリクエスト投げてCDNにキャッシュさせた方がサーバーの負荷低減には良いかもしれない？
@@ -147,24 +153,15 @@ window.document.addEventListener('visibilitychange', () => {
 
 function pollingSubscribe(props: {
 	note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>;
-	$note: ReactiveNoteData;
 }) {
-	const { note, $note } = props;
+	const { note } = props;
 
-	function onFetched(data: Pick<Misskey.entities.Note, 'reactions' | 'reactionEmojis'>): void {
-		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
-		// Upstream assigned as is; the copy keeps subscribers of one note from sharing (and double-incrementing) it.
-		$note.reactions = { ...data.reactions };
-		$note.reactionCount = Object.values(data.reactions).reduce((a, b) => a + b, 0);
-		$note.reactionEmojis = { ...data.reactionEmojis };
-	}
-
+	// kyunet: fix/note-capture-shared-state
+	// the fetchEvent handler lives on the shared capture entry
 	pollingEnqueue(note);
-	fetchEvent.on(note.id, onFetched);
 
 	onUnmounted(() => {
 		pollingDequeue(note);
-		fetchEvent.off(note.id, onFetched);
 	});
 }
 
@@ -210,10 +207,172 @@ function refetchUpdatedNote(id: Misskey.entities.Note['id']): void {
 
 function realtimeSubscribe(props: {
 	note: Pick<Misskey.entities.Note, 'id' | 'createdAt'>;
-	$note: ReactiveNoteData;
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	// kyunet: fix/note-capture-shared-state
+	entry: CaptureEntry;
 }): void {
-	const { note, $note } = props;
+	const { note, entry } = props;
 	const connection = useStream();
+
+	// kyunet: fix/note-capture-shared-state
+	// The server ref-counts `sr` per id, so every display still sends it; the noteUpdated bridge into noteEvents
+	// is registered once per note so one stream event is applied once.
+	function capture(withHandler = false): void {
+		connection.send('sr', { id: note.id });
+		if (withHandler && entry.realtimeCount++ === 0) connection.on('noteUpdated', entry.onStreamNoteUpdated);
+	}
+
+	function decapture(withHandler = false): void {
+		connection.send('un', { id: note.id });
+		if (withHandler && --entry.realtimeCount === 0) connection.off('noteUpdated', entry.onStreamNoteUpdated);
+	}
+
+	function onStreamConnected() {
+		capture(false);
+	}
+
+	capture(true);
+	connection.on('_connected_', onStreamConnected);
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	pollingEnqueue(note, realtimeQueue);
+
+	onUnmounted(() => {
+		decapture(true);
+		connection.off('_connected_', onStreamConnected);
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		pollingDequeue(note, realtimeQueue);
+	});
+}
+
+export type ReactiveNoteData = {
+	reactions: Misskey.entities.Note['reactions'];
+	reactionCount: Misskey.entities.Note['reactionCount'];
+	reactionEmojis: Misskey.entities.Note['reactionEmojis'];
+	myReaction: Misskey.entities.Note['myReaction'];
+	pollChoices: NonNullable<Misskey.entities.Note['poll']>['choices'];
+	// kyunet: fix/note-capture-shared-state
+	renoteCount: Misskey.entities.Note['renoteCount'];
+	repliesCount: Misskey.entities.Note['repliesCount'];
+	cw: Misskey.entities.Note['cw'] | null;
+	text: Misskey.entities.Note['text'];
+	visibility: Misskey.entities.Note['visibility'];
+	updatedAt: Misskey.entities.Note['updatedAt'];
+};
+
+const noReaction = Symbol();
+
+// kyunet: fix/note-capture-shared-state
+// One state per note id, shared by every display of that note (timeline, renote, notification, deck columns).
+// Upstream kept a copy per display seeded from whatever the API returned at mount time, then applied the same
+// stream events to each, so a renote fetched later kept showing larger counts than the original forever.
+// The reaction handlers below are upstream's, moved here from useNoteCapture unchanged except for the state they touch.
+type CaptureEntry = {
+	$note: Reactive<ReactiveNoteData>;
+	refCount: number;
+	realtimeCount: number;
+	notes: Set<Misskey.entities.Note>;
+	onStreamNoteUpdated: (noteData: NoteUpdatedEvent) => void;
+	dispose: () => void;
+};
+
+const captureEntries = new Map<string, CaptureEntry>();
+
+function normalizeReactionName(reaction: string): string {
+	const normalizedName = reaction.replace(/^:(\w+):$/, ':$1@.:');
+	return normalizedName.match('\u200d') ? normalizedName : normalizedName.replace(/\ufe0f/g, '');
+}
+
+function normalizeReactions(reactions: Misskey.entities.Note['reactions']): Misskey.entities.Note['reactions'] {
+	return Object.entries(reactions).reduce((acc, [name, count]) => {
+		// Normalize reactions
+		const normalizedName = name.replace(/^:(\w+):$/, ':$1@.:');
+		if (acc[normalizedName] == null) {
+			acc[normalizedName] = count;
+		} else {
+			acc[normalizedName] += count;
+		}
+		return acc;
+	}, {} as Misskey.entities.Note['reactions']);
+}
+
+function createEntry(note: Misskey.entities.Note): CaptureEntry {
+	const $note = reactive<ReactiveNoteData>({
+		reactions: normalizeReactions(note.reactions),
+		reactionCount: note.reactionCount,
+		reactionEmojis: note.reactionEmojis,
+		myReaction: note.myReaction,
+		pollChoices: note.poll?.choices ?? [],
+		renoteCount: note.renoteCount,
+		repliesCount: note.repliesCount,
+
+		cw: note.cw ?? null,
+		text: note.text ?? '',
+		visibility: note.visibility,
+		updatedAt: note.updatedAt,
+	});
+
+	// bscone: every display's note object of this id, so an edit reaches files/poll of each one
+	const notes = new Set<Misskey.entities.Note>([note]);
+
+	// 操作がダブっていないかどうかを簡易的に記録するためのMap
+	const reactionUserMap = new Map<Misskey.entities.User['id'], string | typeof noReaction>();
+	// The API count already includes my reaction; without this a late `reacted` event for it is counted again.
+	if ($i && note.myReaction != null) reactionUserMap.set($i.id, normalizeReactionName(note.myReaction));
+	let latestPollVotedKey: string | null = null;
+
+	function onReacted(ctx: { userId: Misskey.entities.User['id']; reaction: string; emoji?: { name: string; url: string; } | null; }): void {
+		const normalizedName = normalizeReactionName(ctx.reaction);
+		if (reactionUserMap.has(ctx.userId) && reactionUserMap.get(ctx.userId) === normalizedName) return;
+		reactionUserMap.set(ctx.userId, normalizedName);
+
+		if (ctx.emoji && !(ctx.emoji.name in $note.reactionEmojis)) {
+			$note.reactionEmojis[ctx.emoji.name] = ctx.emoji.url;
+		}
+
+		const currentCount = $note.reactions[normalizedName] || 0;
+
+		$note.reactions[normalizedName] = currentCount + 1;
+		$note.reactionCount += 1;
+
+		if ($i && (ctx.userId === $i.id)) {
+			$note.myReaction = normalizedName;
+		}
+	}
+
+	function onUnreacted(ctx: { userId: Misskey.entities.User['id']; reaction: string; emoji?: { name: string; url: string; } | null; }): void {
+		const normalizedName = normalizeReactionName(ctx.reaction);
+
+		// 確実に一度リアクションされて取り消されている場合のみ処理をとめる（APIで初回読み込み→Streamでアップデート等の場合、reactionUserMapに情報がないため）
+		if (reactionUserMap.has(ctx.userId) && reactionUserMap.get(ctx.userId) === noReaction) return;
+		reactionUserMap.set(ctx.userId, noReaction);
+
+		const currentCount = $note.reactions[normalizedName] || 0;
+
+		$note.reactions[normalizedName] = Math.max(0, currentCount - 1);
+		$note.reactionCount = Math.max(0, $note.reactionCount - 1);
+		if ($note.reactions[normalizedName] === 0) delete $note.reactions[normalizedName];
+
+		if ($i && (ctx.userId === $i.id)) {
+			$note.myReaction = null;
+		}
+	}
+
+	function onPollVoted(ctx: { userId: Misskey.entities.User['id']; choice: number; }): void {
+		const newPollVotedKey = `${ctx.userId}:${ctx.choice}`;
+		if (newPollVotedKey === latestPollVotedKey) return;
+		latestPollVotedKey = newPollVotedKey;
+
+		const choices = [...$note.pollChoices];
+		choices[ctx.choice] = {
+			...choices[ctx.choice],
+			votes: choices[ctx.choice].votes + 1,
+			...($i && (ctx.userId === $i.id) ? {
+				isVoted: true,
+			} : {}),
+		};
+
+		$note.pollChoices = choices;
+	}
 
 	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 	function onFetched(data: Pick<Misskey.entities.Note, 'reactions' | 'reactionEmojis'>): void {
@@ -258,152 +417,12 @@ function realtimeSubscribe(props: {
 				break;
 			}
 
+			// bscone: note edits
 			case 'updated': {
 				refetchUpdatedNote(id);
 				break;
 			}
 		}
-	}
-
-	function capture(withHandler = false): void {
-		connection.send('sr', { id: note.id });
-		if (withHandler) connection.on('noteUpdated', onStreamNoteUpdated);
-	}
-
-	function decapture(withHandler = false): void {
-		connection.send('un', { id: note.id });
-		if (withHandler) connection.off('noteUpdated', onStreamNoteUpdated);
-	}
-
-	function onStreamConnected() {
-		capture(false);
-	}
-
-	capture(true);
-	connection.on('_connected_', onStreamConnected);
-	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
-	pollingEnqueue(note, realtimeQueue);
-	fetchEvent.on(note.id, onFetched);
-
-	onUnmounted(() => {
-		decapture(true);
-		connection.off('_connected_', onStreamConnected);
-		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
-		pollingDequeue(note, realtimeQueue);
-		fetchEvent.off(note.id, onFetched);
-	});
-}
-
-export type ReactiveNoteData = {
-	reactions: Misskey.entities.Note['reactions'];
-	reactionCount: Misskey.entities.Note['reactionCount'];
-	reactionEmojis: Misskey.entities.Note['reactionEmojis'];
-	myReaction: Misskey.entities.Note['myReaction'];
-	pollChoices: NonNullable<Misskey.entities.Note['poll']>['choices'];
-
-	cw: Misskey.entities.Note['cw'] | null;
-	text: Misskey.entities.Note['text'];
-	visibility: Misskey.entities.Note['visibility'];
-	updatedAt: Misskey.entities.Note['updatedAt'];
-};
-
-const noReaction = Symbol();
-
-export function useNoteCapture(props: {
-	note: Misskey.entities.Note;
-	parentNote: Misskey.entities.Note | null;
-	mock?: boolean;
-}): {
-	$note: Reactive<ReactiveNoteData>;
-	subscribe: () => void;
-} {
-	const { note, parentNote, mock } = props;
-
-	const $note = reactive<ReactiveNoteData>({
-		reactions: Object.entries(note.reactions).reduce((acc, [name, count]) => {
-			// Normalize reactions
-			const normalizedName = name.replace(/^:(\w+):$/, ':$1@.:');
-			if (acc[normalizedName] == null) {
-				acc[normalizedName] = count;
-			} else {
-				acc[normalizedName] += count;
-			}
-			return acc;
-		}, {} as Misskey.entities.Note['reactions']),
-		reactionCount: note.reactionCount,
-		reactionEmojis: note.reactionEmojis,
-		myReaction: note.myReaction,
-		pollChoices: note.poll?.choices ?? [],
-
-		cw: note.cw ?? null,
-		text: note.text ?? '',
-		visibility: note.visibility,
-		updatedAt: note.updatedAt,
-	});
-
-	noteEvents.on(`reacted:${note.id}`, onReacted);
-	noteEvents.on(`unreacted:${note.id}`, onUnreacted);
-	noteEvents.on(`pollVoted:${note.id}`, onPollVoted);
-	noteEvents.on(`noteUpdated:${note.id}`, onUpdated);
-
-	// 操作がダブっていないかどうかを簡易的に記録するためのMap
-	const reactionUserMap = new Map<Misskey.entities.User['id'], string | typeof noReaction>();
-	let latestPollVotedKey: string | null = null;
-
-	function onReacted(ctx: { userId: Misskey.entities.User['id']; reaction: string; emoji?: { name: string; url: string; } | null; }): void {
-		let normalizedName = ctx.reaction.replace(/^:(\w+):$/, ':$1@.:');
-		normalizedName = normalizedName.match('\u200d') ? normalizedName : normalizedName.replace(/\ufe0f/g, '');
-		if (reactionUserMap.has(ctx.userId) && reactionUserMap.get(ctx.userId) === normalizedName) return;
-		reactionUserMap.set(ctx.userId, normalizedName);
-
-		if (ctx.emoji && !(ctx.emoji.name in $note.reactionEmojis)) {
-			$note.reactionEmojis[ctx.emoji.name] = ctx.emoji.url;
-		}
-
-		const currentCount = $note.reactions[normalizedName] || 0;
-
-		$note.reactions[normalizedName] = currentCount + 1;
-		$note.reactionCount += 1;
-
-		if ($i && (ctx.userId === $i.id)) {
-			$note.myReaction = normalizedName;
-		}
-	}
-
-	function onUnreacted(ctx: { userId: Misskey.entities.User['id']; reaction: string; emoji?: { name: string; url: string; } | null; }): void {
-		let normalizedName = ctx.reaction.replace(/^:(\w+):$/, ':$1@.:');
-		normalizedName = normalizedName.match('\u200d') ? normalizedName : normalizedName.replace(/\ufe0f/g, '');
-
-		// 確実に一度リアクションされて取り消されている場合のみ処理をとめる（APIで初回読み込み→Streamでアップデート等の場合、reactionUserMapに情報がないため）
-		if (reactionUserMap.has(ctx.userId) && reactionUserMap.get(ctx.userId) === noReaction) return;
-		reactionUserMap.set(ctx.userId, noReaction);
-
-		const currentCount = $note.reactions[normalizedName] || 0;
-
-		$note.reactions[normalizedName] = Math.max(0, currentCount - 1);
-		$note.reactionCount = Math.max(0, $note.reactionCount - 1);
-		if ($note.reactions[normalizedName] === 0) delete $note.reactions[normalizedName];
-
-		if ($i && (ctx.userId === $i.id)) {
-			$note.myReaction = null;
-		}
-	}
-
-	function onPollVoted(ctx: { userId: Misskey.entities.User['id']; choice: number; }): void {
-		const newPollVotedKey = `${ctx.userId}:${ctx.choice}`;
-		if (newPollVotedKey === latestPollVotedKey) return;
-		latestPollVotedKey = newPollVotedKey;
-
-		const choices = [...$note.pollChoices];
-		choices[ctx.choice] = {
-			...choices[ctx.choice],
-			votes: choices[ctx.choice].votes + 1,
-			...($i && (ctx.userId === $i.id) ? {
-				isVoted: true,
-			} : {}),
-		};
-
-		$note.pollChoices = choices;
 	}
 
 	function onUpdated(ctx: {
@@ -417,32 +436,124 @@ export function useNoteCapture(props: {
 		hasPoll?: boolean;
 	}): void {
 		if (ctx.cw !== undefined) {
-			$note.cw = note.cw = ctx.cw;
+			$note.cw = ctx.cw;
+			for (const n of notes) n.cw = ctx.cw;
 		}
 		if (ctx.text !== undefined) {
-			$note.text = note.text = ctx.text;
+			$note.text = ctx.text;
+			for (const n of notes) n.text = ctx.text;
 		}
 		if (ctx.visibility !== undefined) {
-			$note.visibility = note.visibility = ctx.visibility;
+			$note.visibility = ctx.visibility;
+			for (const n of notes) n.visibility = ctx.visibility;
 		}
 		if (ctx.updatedAt !== undefined) {
-			$note.updatedAt = note.updatedAt = ctx.updatedAt;
+			$note.updatedAt = ctx.updatedAt;
+			for (const n of notes) n.updatedAt = ctx.updatedAt;
 		}
 		// Update files if provided
 		if (ctx.files !== undefined) {
-			note.files = ctx.files;
+			for (const n of notes) n.files = ctx.files;
 		}
 		if (ctx.fileIds !== undefined) {
-			note.fileIds = ctx.fileIds ?? [];
+			for (const n of notes) n.fileIds = ctx.fileIds ?? [];
 		}
 		// Update poll if provided
 		if (ctx.poll !== undefined) {
-			note.poll = ctx.poll;
+			for (const n of notes) n.poll = ctx.poll;
 			if (ctx.poll) {
 				$note.pollChoices = ctx.poll.choices;
 			}
 		}
 	}
+
+	noteEvents.on(`reacted:${note.id}`, onReacted);
+	noteEvents.on(`unreacted:${note.id}`, onUnreacted);
+	noteEvents.on(`pollVoted:${note.id}`, onPollVoted);
+	noteEvents.on(`noteUpdated:${note.id}`, onUpdated);
+	fetchEvent.on(note.id, onFetched);
+
+	return {
+		$note,
+		refCount: 1,
+		realtimeCount: 0,
+		notes,
+		onStreamNoteUpdated,
+		dispose: () => {
+			noteEvents.off(`reacted:${note.id}`, onReacted);
+			noteEvents.off(`unreacted:${note.id}`, onUnreacted);
+			noteEvents.off(`pollVoted:${note.id}`, onPollVoted);
+			noteEvents.off(`noteUpdated:${note.id}`, onUpdated);
+			fetchEvent.off(note.id, onFetched);
+		},
+	};
+}
+
+function sameReactions(a: Record<string, number>, b: Record<string, number>): boolean {
+	const keys = Object.keys(a);
+	return keys.length === Object.keys(b).length && keys.every(k => a[k] === b[k]);
+}
+
+// Ids whose displays disagree are collected for one tick so a page mount sends one request.
+const pendingSnapshotIds = new Set<string>();
+
+function requestSnapshot(id: string) {
+	if (pendingSnapshotIds.size === 0) {
+		window.setTimeout(() => {
+			const ids = [...pendingSnapshotIds];
+			pendingSnapshotIds.clear();
+			fetchSnapshotIds(ids);
+		}, 0);
+	}
+	pendingSnapshotIds.add(id);
+}
+
+function acquireEntry(note: Misskey.entities.Note): CaptureEntry {
+	const entry = captureEntries.get(note.id);
+	if (entry == null) {
+		const created = createEntry(note);
+		captureEntries.set(note.id, created);
+		return created;
+	}
+
+	entry.refCount++;
+	entry.notes.add(note);
+	const $note = entry.$note;
+	// Counts that only grow on the timescale of a page view: the larger copy is the fresher one.
+	$note.renoteCount = Math.max($note.renoteCount, note.renoteCount);
+	$note.repliesCount = Math.max($note.repliesCount, note.repliesCount);
+	for (const [name, url] of Object.entries(note.reactionEmojis)) {
+		if (!(name in $note.reactionEmojis)) $note.reactionEmojis[name] = url;
+	}
+	// Reactions can also go down, so neither copy can be trusted; ask the server.
+	const incoming = normalizeReactions(note.reactions);
+	if ($note.reactionCount !== note.reactionCount || !sameReactions($note.reactions, incoming)) {
+		requestSnapshot(note.id);
+	}
+	return entry;
+}
+
+function releaseEntry(id: string, entry: CaptureEntry, note?: Misskey.entities.Note) {
+	if (note != null) entry.notes.delete(note);
+	if (--entry.refCount > 0) return;
+	entry.dispose();
+	if (captureEntries.get(id) === entry) captureEntries.delete(id);
+}
+
+export function useNoteCapture(props: {
+	note: Misskey.entities.Note;
+	parentNote: Misskey.entities.Note | null;
+	mock?: boolean;
+}): {
+	$note: Reactive<ReactiveNoteData>;
+	subscribe: () => void;
+} {
+	const { note, parentNote, mock } = props;
+
+	// kyunet: fix/note-capture-shared-state
+	// Mock notes (tutorials) keep a private state so they never mix with a real note of the same id.
+	const entry = mock ? createEntry(note) : acquireEntry(note);
+	const $note = entry.$note;
 
 	function subscribe() {
 		if (mock) {
@@ -454,21 +565,19 @@ export function useNoteCapture(props: {
 			realtimeSubscribe({
 				note,
 				// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
-				$note,
+				// kyunet: fix/note-capture-shared-state
+				entry,
 			});
 		} else {
 			pollingSubscribe({
 				note,
-				$note,
 			});
 		}
 	}
 
+	// kyunet: fix/note-capture-shared-state
 	onUnmounted(() => {
-		noteEvents.off(`reacted:${note.id}`, onReacted);
-		noteEvents.off(`unreacted:${note.id}`, onUnreacted);
-		noteEvents.off(`pollVoted:${note.id}`, onPollVoted);
-		noteEvents.off(`noteUpdated:${note.id}`, onUpdated);
+		releaseEntry(note.id, entry, note);
 	});
 
 	// 投稿からある程度経過している(=タイムラインを遡って表示した)ノートは、イベントが発生する可能性が低いためそもそも購読しない

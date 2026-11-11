@@ -236,7 +236,8 @@ export function useNote(
 				const { dispose } = os.popup(MkUsersTooltip, {
 					showing,
 					users,
-					count: appearNote.renoteCount,
+					// kyunet: fix/note-capture-shared-state
+					count: $appearNote.renoteCount,
 					anchorElement: els.renoteButton!.value,
 				}, {
 					closed: () => dispose(),

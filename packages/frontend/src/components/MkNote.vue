@@ -131,7 +131,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<footer :class="$style.footer">
 				<button :class="$style.footerButton" class="_button" :disabled="appearNote.canReply === false" :title="appearNote.canReply === false ? i18n.ts._interactionPolicy.replyRestricted : undefined" @click.stop="reply()">
 					<i class="ti ti-arrow-back-up"></i>
-					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
+					<!-- kyunet: fix/note-capture-shared-state -->
+					<p v-if="$appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number($appearNote.repliesCount) }}</p>
 				</button>
 				<button
 					v-if="canRenote"
@@ -141,7 +142,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					@mousedown.prevent="renote()"
 				>
 					<i class="ti ti-repeat"></i>
-					<p v-if="appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.renoteCount) }}</p>
+					<!-- kyunet: fix/note-capture-shared-state -->
+					<p v-if="$appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number($appearNote.renoteCount) }}</p>
 				</button>
 				<button v-else :class="$style.footerButton" class="_button" disabled>
 					<i class="ti ti-ban"></i>
