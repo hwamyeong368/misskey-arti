@@ -3587,3 +3587,12 @@ _kyunetTranslation:
   retryTranslation: "Translate again"
   translating: "Translating…"
 snowEffect: "Let it snow"
+_interactionPolicy:
+  replyPolicy: "Who can reply"
+  quotePolicy: "Who can quote"
+  everyone: "Everyone"
+  followers: "Followers"
+  following: "People you follow"
+  mentioned: "Mentioned users"
+  nobody: "Only me"
+  replyRestricted: "Replies to this note are restricted"

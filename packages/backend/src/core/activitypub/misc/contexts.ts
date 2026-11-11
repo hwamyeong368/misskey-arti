@@ -573,6 +573,20 @@ const extension_context_definition = {
 	'isCat': 'misskey:isCat',
 	// vcard
 	vcard: 'http://www.w3.org/2006/vcard/ns#',
+	// arti: FEP-044f quote posts / GoToSocial interaction policies (as used by Mastodon 4.5)
+	quote: { '@id': 'https://w3id.org/fep/044f#quote', '@type': '@id' },
+	quoteUri: 'http://fedibird.com/ns#quoteUri',
+	quoteAuthorization: { '@id': 'https://w3id.org/fep/044f#quoteAuthorization', '@type': '@id' },
+	QuoteRequest: 'https://w3id.org/fep/044f#QuoteRequest',
+	QuoteAuthorization: 'https://w3id.org/fep/044f#QuoteAuthorization',
+	gts: 'https://gotosocial.org/ns#',
+	interactionPolicy: { '@id': 'gts:interactionPolicy', '@type': '@id' },
+	canQuote: { '@id': 'gts:canQuote', '@type': '@id' },
+	canReply: { '@id': 'gts:canReply', '@type': '@id' },
+	automaticApproval: { '@id': 'gts:automaticApproval', '@type': '@id' },
+	manualApproval: { '@id': 'gts:manualApproval', '@type': '@id' },
+	interactingObject: { '@id': 'gts:interactingObject', '@type': '@id' },
+	interactionTarget: { '@id': 'gts:interactionTarget', '@type': '@id' },
 } satisfies Context;
 
 export const CONTEXT: (string | Context)[] = [...context_iris, extension_context_definition];

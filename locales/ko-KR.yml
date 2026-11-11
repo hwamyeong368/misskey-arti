@@ -3726,3 +3726,12 @@ _kyunetTranslation:
   retryTranslation: "다시 번역"
   translating: "번역 중…"
 snowEffect: "눈 내리기"
+_interactionPolicy:
+  replyPolicy: "답글 허용"
+  quotePolicy: "인용 허락"
+  everyone: "모두"
+  followers: "나를 팔로우하는 사람"
+  following: "내가 팔로우하는 사람"
+  mentioned: "멘션한 사람"
+  nobody: "나만"
+  replyRestricted: "답글이 제한된 노트예요"

@@ -16,6 +16,7 @@ import { toArray, toSingle, unique } from '@/misc/prelude/array.js';
 import type { MiEmoji } from '@/models/Emoji.js';
 import type { MiDriveFile } from '@/models/DriveFile.js';
 import { NoteCreateService } from '@/core/NoteCreateService.js';
+import { NoteInteractionPolicyService } from '@/core/NoteInteractionPolicyService.js';
 import { NoteUpdateService } from '@/core/NoteUpdateService.js';
 import type Logger from '@/logger.js';
 import { IdService } from '@/core/IdService.js';
@@ -77,6 +78,7 @@ export class ApNoteService {
 		private apQuestionService: ApQuestionService,
 		private pollService: PollService,
 		private noteCreateService: NoteCreateService,
+		private noteInteractionPolicyService: NoteInteractionPolicyService,
 		private noteUpdateService: NoteUpdateService,
 		private apDbResolverService: ApDbResolverService,
 		private apLoggerService: ApLoggerService,
@@ -260,7 +262,7 @@ export class ApNoteService {
 		// 引用
 		let quote: MiNote | undefined | null = null;
 
-		if (note._misskey_quote ?? note.quoteUrl) {
+		if (note._misskey_quote ?? note.quoteUrl ?? note.quote ?? note.quoteUri) {
 			const tryResolveNote = async (uri: string): Promise<
 				| { status: 'ok'; res: MiNote }
 				| { status: 'permerror' | 'temperror' }
@@ -277,7 +279,7 @@ export class ApNoteService {
 				}
 			};
 
-			const uris = unique([note._misskey_quote, note.quoteUrl].filter(x => x != null));
+			const uris = unique([note._misskey_quote, note.quoteUrl, note.quote, note.quoteUri].filter(x => typeof x === 'string'));
 			const results = await Promise.all(uris.map(tryResolveNote));
 
 			quote = results.filter((x): x is { status: 'ok', res: MiNote } => x.status === 'ok').map(x => x.res).at(0);
@@ -286,6 +288,16 @@ export class ApNoteService {
 					throw new Error('quote resolve failed');
 				}
 			}
+		}
+
+		// arti: reply / quote policies of local notes
+		if (reply != null && reply.userHost == null && !(await this.noteInteractionPolicyService.isAllowed(reply, 'reply', actor.id))) {
+			this.logger.info(`reply rejected by the note's reply policy: actor=${actor.username}@${actor.host}, note=${reply.id}`);
+			return null;
+		}
+		if (quote != null && quote.userHost == null && !(await this.noteInteractionPolicyService.isAllowed(quote, 'quote', actor.id))) {
+			this.logger.info(`quote dropped by the note's quote policy: actor=${actor.username}@${actor.host}, note=${quote.id}`);
+			quote = null;
 		}
 
 		// vote

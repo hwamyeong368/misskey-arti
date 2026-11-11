@@ -3841,3 +3841,12 @@ _kyunetTranslation:
   retryTranslation: "もう一度翻訳"
   translating: "翻訳中…"
 snowEffect: "雪を降らせる"
+_interactionPolicy:
+  replyPolicy: "返信できる人"
+  quotePolicy: "引用できる人"
+  everyone: "全員"
+  followers: "フォロワー"
+  following: "フォロー中のユーザー"
+  mentioned: "メンションしたユーザー"
+  nobody: "自分のみ"
+  replyRestricted: "このノートは返信が制限されています"

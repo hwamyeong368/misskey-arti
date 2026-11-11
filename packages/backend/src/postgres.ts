@@ -47,6 +47,7 @@ import { MiNoteReaction } from '@/models/NoteReaction.js';
 import { MiNoteRevision } from '@/models/NoteRevision.js';
 import { MiNoteThreadMuting } from '@/models/NoteThreadMuting.js';
 import { MiNoteDraft } from '@/models/NoteDraft.js';
+import { MiNoteQuoteAuthorization } from '@/models/NoteQuoteAuthorization.js';
 import { MiPage } from '@/models/Page.js';
 import { MiPageLike } from '@/models/PageLike.js';
 import { MiPasswordResetRequest } from '@/models/PasswordResetRequest.js';
@@ -215,6 +216,7 @@ export const entities = [
 	MiNoteRevision,
 	MiNoteThreadMuting,
 	MiNoteDraft,
+	MiNoteQuoteAuthorization,
 	MiPage,
 	MiPageLike,
 	MiGalleryPost,

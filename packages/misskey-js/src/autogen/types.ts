@@ -4717,6 +4717,12 @@ export type components = {
             localOnly?: boolean;
             /** @enum {string|null} */
             reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
+            /** @enum {string|null} */
+            replyPolicy?: 'followers' | 'following' | 'mentioned' | 'nobody' | null;
+            /** @enum {string|null} */
+            quotePolicy?: 'followers' | 'nobody' | null;
+            canReply?: boolean;
+            canQuote?: boolean;
             reactionEmojis: {
                 [key: string]: string;
             };
@@ -4782,6 +4788,10 @@ export type components = {
             localOnly: boolean;
             /** @enum {string|null} */
             reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
+            /** @enum {string|null} */
+            replyPolicy: 'followers' | 'following' | 'mentioned' | 'nobody' | null;
+            /** @enum {string|null} */
+            quotePolicy: 'followers' | 'nobody' | null;
             scheduledAt: number | null;
             isActuallyScheduled: boolean;
         };
@@ -31500,6 +31510,16 @@ export interface operations {
                      * @enum {string|null}
                      */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    replyPolicy?: null | 'followers' | 'following' | 'mentioned' | 'nobody';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    quotePolicy?: null | 'followers' | 'nobody';
                     /** @default false */
                     noExtractMentions?: boolean;
                     /** @default false */
@@ -31741,6 +31761,16 @@ export interface operations {
                      * @enum {string|null}
                      */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    replyPolicy?: null | 'followers' | 'following' | 'mentioned' | 'nobody';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    quotePolicy?: null | 'followers' | 'nobody';
                     /** Format: misskey:id */
                     replyId?: string | null;
                     /** Format: misskey:id */
@@ -31979,6 +32009,10 @@ export interface operations {
                     localOnly?: boolean;
                     /** @enum {string|null} */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
+                    /** @enum {string|null} */
+                    replyPolicy?: null | 'followers' | 'following' | 'mentioned' | 'nobody';
+                    /** @enum {string|null} */
+                    quotePolicy?: null | 'followers' | 'nobody';
                     /** Format: misskey:id */
                     replyId?: string | null;
                     /** Format: misskey:id */

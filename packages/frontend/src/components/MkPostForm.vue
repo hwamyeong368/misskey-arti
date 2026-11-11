@@ -214,6 +214,11 @@ if (props.initialVisibleUsers) {
 	props.initialVisibleUsers.forEach(u => pushVisibleUser(u));
 }
 const reactionAcceptance = ref(store.s.reactionAcceptance);
+// arti: who may reply / quote (null = everyone)
+type ReplyPolicy = 'followers' | 'following' | 'mentioned' | 'nobody' | null;
+type QuotePolicy = 'followers' | 'nobody' | null;
+const replyPolicy = ref<ReplyPolicy>(null);
+const quotePolicy = ref<QuotePolicy>(null);
 const scheduledAt = ref<number | null>(null);
 const draghover = ref(false);
 const quoteId = ref<string | null>(null);
@@ -440,6 +445,8 @@ function watchForDraft() {
 	watch(localOnly, () => saveDraft());
 	watch(quoteId, () => saveDraft());
 	watch(reactionAcceptance, () => saveDraft());
+	watch(replyPolicy, () => saveDraft());
+	watch(quotePolicy, () => saveDraft());
 	watch(scheduledAt, () => saveDraft());
 }
 
@@ -610,6 +617,35 @@ async function toggleReactionAcceptance() {
 	reactionAcceptance.value = select.result;
 }
 
+// arti: reply / quote policy pickers
+function replyPolicyLabel(v: ReplyPolicy): string {
+	return v == null ? i18n.ts._interactionPolicy.everyone : i18n.ts._interactionPolicy[v];
+}
+
+function quotePolicyLabel(v: QuotePolicy): string {
+	return v == null ? i18n.ts._interactionPolicy.everyone : i18n.ts._interactionPolicy[v];
+}
+
+async function selectReplyPolicy() {
+	const select = await os.select({
+		title: i18n.ts._interactionPolicy.replyPolicy,
+		items: ([null, 'followers', 'following', 'mentioned', 'nobody'] as const).map(v => ({ value: v, label: replyPolicyLabel(v) })),
+		default: replyPolicy.value,
+	});
+	if (select.canceled) return;
+	replyPolicy.value = select.result;
+}
+
+async function selectQuotePolicy() {
+	const select = await os.select({
+		title: i18n.ts._interactionPolicy.quotePolicy,
+		items: ([null, 'followers', 'nobody'] as const).map(v => ({ value: v, label: quotePolicyLabel(v) })),
+		default: quotePolicy.value,
+	});
+	if (select.canceled) return;
+	quotePolicy.value = select.result;
+}
+
 //#region その他の設定メニューpopup
 function showOtherSettings() {
 	let reactionAcceptanceIcon = 'ti ti-icons';
@@ -652,7 +688,21 @@ function showOtherSettings() {
 		action: () => {
 			toggleReactionAcceptance();
 		},
-	}, { type: 'divider' }, {
+	}, ...(noteId.value == null ? [{
+		icon: 'ti ti-message-circle-cog',
+		text: i18n.ts._interactionPolicy.replyPolicy,
+		caption: replyPolicyLabel(replyPolicy.value),
+		action: () => {
+			selectReplyPolicy();
+		},
+	}, {
+		icon: 'ti ti-quote',
+		text: i18n.ts._interactionPolicy.quotePolicy,
+		caption: quotePolicyLabel(quotePolicy.value),
+		action: () => {
+			selectQuotePolicy();
+		},
+	}] : []), { type: 'divider' }, {
 		type: 'button',
 		text: i18n.ts._drafts.saveToDraft,
 		icon: 'ti ti-cloud-upload',
@@ -882,6 +932,8 @@ type StoredDrafts = {
 			visibleUserIds?: string[];
 			quoteId: string | null;
 			reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
+			replyPolicy?: ReplyPolicy;
+			quotePolicy?: QuotePolicy;
 			scheduledAt: number | null;
 		};
 	};
@@ -905,6 +957,8 @@ function saveDraft() {
 			...( visibleUsers.value.length > 0 ? { visibleUserIds: visibleUsers.value.map(x => x.id) } : {}),
 			quoteId: quoteId.value,
 			reactionAcceptance: reactionAcceptance.value,
+			replyPolicy: replyPolicy.value,
+			quotePolicy: quotePolicy.value,
 			scheduledAt: scheduledAt.value,
 		},
 	};
@@ -937,6 +991,8 @@ async function saveServerDraft(options: {
 		replyId: replyTargetNote.value ? replyTargetNote.value.id : null,
 		channelId: targetChannel.value ? targetChannel.value.id : null,
 		reactionAcceptance: reactionAcceptance.value,
+		replyPolicy: replyPolicy.value,
+		quotePolicy: quotePolicy.value,
 		scheduledAt: scheduledAt.value,
 		isActuallyScheduled: options.isActuallyScheduled ?? false,
 	});
@@ -1039,6 +1095,7 @@ async function post(ev?: PointerEvent) {
 		visibility: visibility.value,
 		visibleUserIds: visibility.value === 'specified' ? visibleUsers.value.map(u => u.id) : undefined,
 		reactionAcceptance: reactionAcceptance.value,
+		...(noteId.value == null ? { replyPolicy: replyPolicy.value, quotePolicy: quotePolicy.value } : {}),
 	};
 
 	if (withHashtags.value && hashtags.value && hashtags.value.trim() !== '') {
@@ -1313,6 +1370,8 @@ async function openAccountMenu(ev: PointerEvent) {
 				renoteTargetNote.value = draft.renote;
 				replyTargetNote.value = draft.reply;
 				reactionAcceptance.value = draft.reactionAcceptance;
+				replyPolicy.value = draft.replyPolicy ?? null;
+				quotePolicy.value = draft.quotePolicy ?? null;
 				scheduledAt.value = draft.scheduledAt ?? null;
 				if (draft.channel) targetChannel.value = draft.channel as unknown as Misskey.entities.Channel;
 
@@ -1463,6 +1522,8 @@ onMounted(() => {
 				}
 				quoteId.value = draft.data.quoteId;
 				reactionAcceptance.value = draft.data.reactionAcceptance;
+				replyPolicy.value = draft.data.replyPolicy ?? null;
+				quotePolicy.value = draft.data.quotePolicy ?? null;
 				scheduledAt.value = draft.data.scheduledAt ?? null;
 			}
 		}

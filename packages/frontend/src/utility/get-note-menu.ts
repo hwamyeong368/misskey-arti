@@ -767,7 +767,7 @@ export function getRenoteMenu(props: {
 					});
 				}
 			},
-		}, ...(props.mock ? [] : [{
+		}, ...(props.mock || appearNote.canQuote === false ? [] : [{
 			text: i18n.ts.quote,
 			icon: 'ti ti-quote',
 			action: () => {

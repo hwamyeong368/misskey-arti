@@ -159,7 +159,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					:myReaction="$appearNote.myReaction"
 					:noteId="appearNote.id"
 				/>
-				<button class="_button" :class="$style.noteFooterButton" @click="reply()">
+				<button class="_button" :class="$style.noteFooterButton" :disabled="appearNote.canReply === false" :title="appearNote.canReply === false ? i18n.ts._interactionPolicy.replyRestricted : undefined" @click="reply()">
 					<i class="ti ti-arrow-back-up"></i>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.noteFooterButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>

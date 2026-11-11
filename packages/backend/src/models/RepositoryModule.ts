@@ -45,6 +45,7 @@ import {
 	MiNoteRevision,
 	MiNoteThreadMuting,
 	MiNoteDraft,
+	MiNoteQuoteAuthorization,
 	MiPage,
 	MiPageLike,
 	MiPasswordResetRequest,
@@ -156,6 +157,12 @@ const $noteRevisionsRepository: Provider = {
 const $noteDraftsRepository: Provider = {
 	provide: DI.noteDraftsRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiNoteDraft).extend(miRepository as MiRepository<MiNoteDraft>),
+	inject: [DI.db],
+};
+
+const $noteQuoteAuthorizationsRepository: Provider = {
+	provide: DI.noteQuoteAuthorizationsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiNoteQuoteAuthorization).extend(miRepository as MiRepository<MiNoteQuoteAuthorization>),
 	inject: [DI.db],
 };
 
@@ -588,6 +595,7 @@ const $reversiGamesRepository: Provider = {
 		$noteReactionsRepository,
 		$noteRevisionsRepository,
 		$noteDraftsRepository,
+		$noteQuoteAuthorizationsRepository,
 		$pollsRepository,
 		$pollVotesRepository,
 		$userProfilesRepository,
@@ -670,6 +678,7 @@ const $reversiGamesRepository: Provider = {
 		$noteReactionsRepository,
 		$noteRevisionsRepository,
 		$noteDraftsRepository,
+		$noteQuoteAuthorizationsRepository,
 		$pollsRepository,
 		$pollVotesRepository,
 		$userProfilesRepository,

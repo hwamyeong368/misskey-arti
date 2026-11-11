@@ -4,7 +4,7 @@
  */
 
 import { Entity, Index, JoinColumn, Column, PrimaryColumn, ManyToOne } from 'typeorm';
-import { noteVisibilities, noteReactionAcceptances } from '@/types.js';
+import { noteVisibilities, noteReactionAcceptances, noteReplyPolicies, noteQuotePolicies } from '@/types.js';
 import { id } from './util/id.js';
 import { MiUser } from './User.js';
 import { MiChannel } from './Channel.js';
@@ -81,6 +81,18 @@ export class MiNoteDraft {
 		length: 64, nullable: true,
 	})
 	public reactionAcceptance: typeof noteReactionAcceptances[number];
+
+	// arti: who may reply (null = everyone)
+	@Column('varchar', {
+		length: 16, nullable: true,
+	})
+	public replyPolicy: typeof noteReplyPolicies[number];
+
+	// arti: who may quote (null = everyone)
+	@Column('varchar', {
+		length: 16, nullable: true,
+	})
+	public quotePolicy: typeof noteQuotePolicies[number];
 
 	/**
 	 * public ... 公開
