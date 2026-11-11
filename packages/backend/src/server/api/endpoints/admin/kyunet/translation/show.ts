@@ -4,7 +4,9 @@
  */
 // kyunet: Fork-only admin endpoint: current LLM translation settings (apiKey redacted) + stats (spec 6.2).
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { DI } from '@/di-symbols.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { KyunetTranslationSettingService } from '@/core/KyunetTranslationSettingService.js';
 import { KyunetTranslationService } from '@/core/KyunetTranslationService.js';
@@ -22,6 +24,8 @@ export const meta = {
 		optional: false, nullable: false,
 		properties: {
 			enabled: { type: 'boolean', optional: false, nullable: false },
+			provider: { type: 'string', optional: false, nullable: false, enum: ['openai', 'deepl'] },
+			deeplAuthKeySet: { type: 'boolean', optional: false, nullable: false },
 			baseUrl: { type: 'string', optional: false, nullable: true },
 			apiKeySet: { type: 'boolean', optional: false, nullable: false },
 			model: { type: 'string', optional: false, nullable: true },
@@ -63,13 +67,18 @@ export const paramDef = {
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
+		@Inject(DI.meta)
+		private serverSettings: MiMeta,
+
 		private kyunetTranslationSettingService: KyunetTranslationSettingService,
 		private kyunetTranslationService: KyunetTranslationService,
 	) {
 		super(meta, paramDef, async () => {
 			const { id: _id, updatedAt, ...pub } = this.kyunetTranslationSettingService.toPublic();
 			const stats = await this.kyunetTranslationService.getStats();
-			return { ...pub, updatedAt: updatedAt.toISOString(), defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, stats };
+			// arti: only whether the instance-wide DeepL key exists; the key itself never leaves the server
+			const deeplAuthKeySet = this.serverSettings.deeplAuthKey != null && this.serverSettings.deeplAuthKey !== '';
+			return { ...pub, deeplAuthKeySet, updatedAt: updatedAt.toISOString(), defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, stats };
 		});
 	}
 }

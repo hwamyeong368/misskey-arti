@@ -14,7 +14,8 @@ import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import type { KyunetTranslationsRepository, NotesRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
 import type { MiKyunetTranslation } from '@/models/KyunetTranslation.js';
-import type { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
+import { kyunetTranslationProviders } from '@/models/KyunetTranslationSetting.js';
+import type { MiKyunetTranslationSetting, KyunetTranslationProvider } from '@/models/KyunetTranslationSetting.js';
 import type { MiLocalUser } from '@/models/User.js';
 import type Logger from '@/logger.js';
 import { bindThis } from '@/decorators.js';
@@ -23,6 +24,7 @@ import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { IdService } from '@/core/IdService.js';
 import { KyunetTranslationSettingService } from '@/core/KyunetTranslationSettingService.js';
 import { KyunetTranslationLlmClient, KyunetLlmError } from '@/core/KyunetTranslationLlmClient.js';
+import { KyunetTranslationDeeplClient } from '@/core/KyunetTranslationDeeplClient.js';
 import type { LlmInputItem, LlmOutputItem, TranslationKind } from '@/core/KyunetTranslationLlmClient.js';
 import { isObviouslyTargetLang, primaryLang } from '@/misc/kyunet-script-gate.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
@@ -98,6 +100,7 @@ export class KyunetTranslationService {
 
 		private settingService: KyunetTranslationSettingService,
 		private llmClient: KyunetTranslationLlmClient,
+		private deeplClient: KyunetTranslationDeeplClient,
 		private noteEntityService: NoteEntityService,
 		private idService: IdService,
 		private loggerService: LoggerService,
@@ -119,8 +122,17 @@ export class KyunetTranslationService {
 	}
 
 	@bindThis
-	public hashFor(kind: TranslationKind, text: string): string {
-		return createHash('sha256').update(`${kind}\n${this.normalizeText(text)}`).digest('hex');
+	public hashFor(kind: TranslationKind, text: string, provider: KyunetTranslationProvider = 'openai'): string {
+		// arti: non-default providers get their own cache namespace so switching providers never serves the other one's results
+		const prefix = provider === 'openai' ? '' : `${provider}\n`;
+		return createHash('sha256').update(`${prefix}${kind}\n${this.normalizeText(text)}`).digest('hex');
+	}
+
+	// arti: pick the translation backend chosen in the admin settings
+	private complete(setting: MiKyunetTranslationSetting, targetLang: string, items: LlmInputItem[]) {
+		return setting.provider === 'deepl'
+			? this.deeplClient.complete(setting, targetLang, items)
+			: this.llmClient.complete(setting, targetLang, items);
 	}
 
 	//#region resolvers
@@ -231,7 +243,7 @@ export class KyunetTranslationService {
 				gateSkipped++;
 				return;
 			}
-			pending.push({ index, kind: r.kind, text: r.text, hash: this.hashFor(r.kind, r.text) });
+			pending.push({ index, kind: r.kind, text: r.text, hash: this.hashFor(r.kind, r.text, setting.provider) });
 		});
 		if (gateSkipped > 0) this.incrStat('gateSkipped', gateSkipped);
 		if (pending.length === 0) return results;
@@ -294,12 +306,12 @@ export class KyunetTranslationService {
 			this.incrStat('llmItems', batch.length);
 			this.incrStat('llmCalls');
 			const input: LlmInputItem[] = batch.map((unit, i) => ({ i, kind: unit.kind, text: unit.text }));
-			const { items: output } = await this.llmClient.complete(setting, targetLang, input);
+			const { items: output } = await this.complete(setting, targetLang, input);
 			const built: MiKyunetTranslation[] = [];
 			output.forEach((out, i) => {
 				const unit = batch[i];
 				const translated = this.postProcess(out, unit.text);
-				built.push({ contentHash: unit.hash, targetLang: langKey, text: translated, sourceLangs: out.sourceLangs, provider: 'llm', model: setting.model ?? '', createdAt: new Date() });
+				built.push({ contentHash: unit.hash, targetLang: langKey, text: translated, sourceLangs: out.sourceLangs, provider: setting.provider === 'deepl' ? 'deepl' : 'llm', model: setting.provider === 'deepl' ? 'deepl' : (setting.model ?? ''), createdAt: new Date() });
 				for (const idx of unit.indices) results[idx] = { status: 'ok', text: translated, sourceLangs: out.sourceLangs };
 			});
 			rows = built;
@@ -356,7 +368,7 @@ export class KyunetTranslationService {
 		const setting = this.settingService.get();
 		const started = Date.now();
 		try {
-			const { items, raw, latencyMs } = await this.llmClient.complete(setting, targetLang, [{ i: 0, kind: 'note', text: this.normalizeText(text) }]);
+			const { items, raw, latencyMs } = await this.complete(setting, targetLang, [{ i: 0, kind: 'note', text: this.normalizeText(text) }]);
 			return { ok: true, latencyMs, result: items[0], raw };
 		} catch (err) {
 			const reason = err instanceof KyunetLlmError ? `${err.reason}: ${err.message}` : (err instanceof Error ? err.message : String(err));
@@ -382,7 +394,7 @@ export class KyunetTranslationService {
 		if (note == null) throw new Error('no such note');
 		let text = note.text ?? '';
 		if (note.cw != null) text = `${note.cw}\n-----\n${text}`;
-		const res = await this.translationsRepository.delete({ contentHash: this.hashFor('note', text) });
+		const res = await this.translationsRepository.delete({ contentHash: In(kyunetTranslationProviders.map(provider => this.hashFor('note', text, provider))) });
 		return res.affected ?? 0;
 	}
 

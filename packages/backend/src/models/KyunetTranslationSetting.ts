@@ -8,6 +8,10 @@ import { Entity, Column, PrimaryColumn } from 'typeorm';
 
 export type KyunetMaxTokensParam = 'max_completion_tokens' | 'max_tokens';
 
+// arti: translation backend. 'openai' = OpenAI-compatible LLM (kyunet original), 'deepl' = DeepL API using meta.deeplAuthKey.
+export const kyunetTranslationProviders = ['openai', 'deepl'] as const;
+export type KyunetTranslationProvider = typeof kyunetTranslationProviders[number];
+
 @Entity('kyunet_translation_setting')
 export class MiKyunetTranslationSetting {
 	@PrimaryColumn({
@@ -20,6 +24,12 @@ export class MiKyunetTranslationSetting {
 		default: false,
 	})
 	public enabled: boolean;
+
+	// arti: which backend translates (see KyunetTranslationProvider)
+	@Column('varchar', {
+		length: 16, default: 'openai',
+	})
+	public provider: KyunetTranslationProvider;
 
 	@Column('varchar', {
 		length: 1024, nullable: true,

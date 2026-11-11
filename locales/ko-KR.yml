@@ -3712,4 +3712,8 @@ _kyunetTranslation:
   profiles: "프로필을 자동으로 번역"
   profiles_description: "프로필 페이지의 소개와 추가 정보를 번역해 표시합니다."
   translationFailed: "번역에 실패했습니다. 잠시 후 다시 시도해 주세요."
+  provider: "번역 공급자"
+  providerOpenai: "OpenAI 호환 (LLM)"
+  deeplKeyNote: "DeepL 키는 제어판 → 외부 서비스의 DeepL 설정에 넣은 키를 사용합니다. 노트뿐 아니라 이름과 프로필도 DeepL로 번역됩니다. 공급자를 바꾸면 캐시는 따로 저장됩니다."
+  deeplKeyMissing: "DeepL 인증 키가 아직 없습니다. 외부 서비스 설정에서 입력해 주세요."
 snowEffect: "눈 내리기"

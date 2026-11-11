@@ -65,5 +65,6 @@ Support us with a ⭐ !
 ## 크레딧
 
 - LLM 번역 기능: [kyunet](https://git.kyu.sh/kyush/misskey) `2026.10.0-kyunet.5`
+- LLM 번역에 DeepL 공급자 추가 (이름·프로필도 DeepL로 번역): CT 자체 확장, kyunet LLM 번역 기반
 
 - 쪽지 수정·삭제·리액션 연합, 방 보관 — 초코픽 `2026.10.1+choco.5` (#26)

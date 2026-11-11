@@ -3573,4 +3573,8 @@ _kyunetTranslation:
   profiles: "Translate profiles automatically"
   profiles_description: "Translates the bio and the additional fields on profile pages."
   translationFailed: "Translation failed. Please try again later."
+  provider: "Translation provider"
+  providerOpenai: "OpenAI-compatible (LLM)"
+  deeplKeyNote: "The DeepL key from Control Panel → External services is used. Names and profiles are translated by DeepL as well as notes. Each provider keeps its own cache."
+  deeplKeyMissing: "The DeepL auth key is not set yet. Enter it in the external services settings."
 snowEffect: "Let it snow"
