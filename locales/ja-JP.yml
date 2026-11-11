@@ -3841,6 +3841,14 @@ _kyunetTranslation:
   retryTranslation: "もう一度翻訳"
   translating: "翻訳中…"
 snowEffect: "雪を降らせる"
+_notificationRequests:
+  title: "知らない人からの通知"
+  enable: "知らない人からの通知を分けて受け取る"
+  enableDescription: "フォローもフォロワーでもない人からのメンション・返信・引用を「知らない人」タブにまとめます。プッシュ通知は届きません。"
+  description: "フォローもフォロワーでもない人からのメンション・返信・引用です。「通知を受け取る」を押すと、その人の通知は次から通常の通知に届きます。"
+  allow: "通知を受け取る"
+  clear: "すべて削除"
+  clearConfirm: "知らない人からの通知をすべて削除しますか？"
 _interactionPolicy:
   replyPolicy: "返信できる人"
   quotePolicy: "引用できる人"

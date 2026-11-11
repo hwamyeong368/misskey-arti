@@ -14397,6 +14397,36 @@ export interface Locale extends ILocale {
      * 雪を降らせる
      */
     "snowEffect": string;
+    "_notificationRequests": {
+        /**
+         * 知らない人からの通知
+         */
+        "title": string;
+        /**
+         * 知らない人からの通知を分けて受け取る
+         */
+        "enable": string;
+        /**
+         * フォローもフォロワーでもない人からのメンション・返信・引用を「知らない人」タブにまとめます。プッシュ通知は届きません。
+         */
+        "enableDescription": string;
+        /**
+         * フォローもフォロワーでもない人からのメンション・返信・引用です。「通知を受け取る」を押すと、その人の通知は次から通常の通知に届きます。
+         */
+        "description": string;
+        /**
+         * 通知を受け取る
+         */
+        "allow": string;
+        /**
+         * すべて削除
+         */
+        "clear": string;
+        /**
+         * 知らない人からの通知をすべて削除しますか？
+         */
+        "clearConfirm": string;
+    };
     "_interactionPolicy": {
         /**
          * 返信できる人

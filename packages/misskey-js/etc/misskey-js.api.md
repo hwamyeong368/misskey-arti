@@ -2100,6 +2100,9 @@ declare namespace entities {
         IImportUserListsRequest,
         IMoveRequest,
         IMoveResponse,
+        INotificationRequestsAllowRequest,
+        INotificationRequestsListRequest,
+        INotificationRequestsListResponse,
         INotificationsRequest,
         INotificationsResponse,
         INotificationsGroupedRequest,
@@ -2809,6 +2812,15 @@ type IMoveRequest = operations['i___move']['requestBody']['content']['applicatio
 
 // @public (undocumented)
 type IMoveResponse = operations['i___move']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type INotificationRequestsAllowRequest = operations['i___notification-requests___allow']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type INotificationRequestsListRequest = operations['i___notification-requests___list']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type INotificationRequestsListResponse = operations['i___notification-requests___list']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type INotificationsGroupedRequest = operations['i___notifications-grouped']['requestBody']['content']['application/json'];

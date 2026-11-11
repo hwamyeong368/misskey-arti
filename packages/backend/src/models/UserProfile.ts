@@ -178,6 +178,12 @@ export class MiUserProfile {
 	})
 	public autoAcceptFollowed: boolean;
 
+	// arti: keep mentions / replies / quotes from people I neither follow nor am followed by in a separate "requests" box
+	@Column('boolean', {
+		default: false,
+	})
+	public notificationRequestsEnabled: boolean;
+
 	@Column('integer', { nullable: true })
 	public followApprovalLocalSeconds: number | null;
 

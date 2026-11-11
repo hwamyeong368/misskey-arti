@@ -194,6 +194,7 @@ export const paramDef = {
 		publicReactions: { type: 'boolean' },
 		carefulBot: { type: 'boolean' },
 		autoAcceptFollowed: { type: 'boolean' },
+		notificationRequestsEnabled: { type: 'boolean' },
 		followApprovalLocalSeconds: { type: 'integer', nullable: true, minimum: 0, maximum: FOLLOW_APPROVAL_MAX_SECONDS },
 		followApprovalRemoteSeconds: { type: 'integer', nullable: true, minimum: 0, maximum: FOLLOW_APPROVAL_MAX_SECONDS },
 		noCrawle: { type: 'boolean' },
@@ -372,6 +373,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (typeof ps.isBot === 'boolean') updates.isBot = ps.isBot;
 			if (typeof ps.carefulBot === 'boolean') profileUpdates.carefulBot = ps.carefulBot;
 			if (typeof ps.autoAcceptFollowed === 'boolean') profileUpdates.autoAcceptFollowed = ps.autoAcceptFollowed;
+			if (typeof ps.notificationRequestsEnabled === 'boolean') profileUpdates.notificationRequestsEnabled = ps.notificationRequestsEnabled;
 			if (ps.followApprovalLocalSeconds !== undefined) profileUpdates.followApprovalLocalSeconds = ps.followApprovalLocalSeconds;
 			if (ps.followApprovalRemoteSeconds !== undefined) profileUpdates.followApprovalRemoteSeconds = ps.followApprovalRemoteSeconds;
 			if (typeof ps.noCrawle === 'boolean') profileUpdates.noCrawle = ps.noCrawle;

@@ -459,6 +459,9 @@ import type {
 	IImportUserListsRequest,
 	IMoveRequest,
 	IMoveResponse,
+	INotificationRequestsAllowRequest,
+	INotificationRequestsListRequest,
+	INotificationRequestsListResponse,
 	INotificationsRequest,
 	INotificationsResponse,
 	INotificationsGroupedRequest,
@@ -1007,6 +1010,9 @@ export type Endpoints = {
 	'i/import-muting': { req: IImportMutingRequest; res: EmptyResponse };
 	'i/import-user-lists': { req: IImportUserListsRequest; res: EmptyResponse };
 	'i/move': { req: IMoveRequest; res: IMoveResponse };
+	'i/notification-requests/allow': { req: INotificationRequestsAllowRequest; res: EmptyResponse };
+	'i/notification-requests/clear': { req: EmptyRequest; res: EmptyResponse };
+	'i/notification-requests/list': { req: INotificationRequestsListRequest; res: INotificationRequestsListResponse };
 	'i/notifications': { req: INotificationsRequest; res: INotificationsResponse };
 	'i/notifications-grouped': { req: INotificationsGroupedRequest; res: INotificationsGroupedResponse };
 	'i/page-likes': { req: IPageLikesRequest; res: IPageLikesResponse };
