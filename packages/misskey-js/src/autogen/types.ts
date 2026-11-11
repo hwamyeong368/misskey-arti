@@ -4718,9 +4718,9 @@ export type components = {
             /** @enum {string|null} */
             reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
             /** @enum {string|null} */
-            replyPolicy: 'followers' | 'following' | 'mentioned' | 'nobody' | null;
+            replyPolicy?: 'followers' | 'following' | 'mentioned' | 'nobody' | null;
             /** @enum {string|null} */
-            quotePolicy: 'followers' | 'nobody' | null;
+            quotePolicy?: 'followers' | 'nobody' | null;
             canReply?: boolean;
             canQuote?: boolean;
             reactionEmojis: {

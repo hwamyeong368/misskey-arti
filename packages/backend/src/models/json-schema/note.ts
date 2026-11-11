@@ -213,12 +213,12 @@ export const packedNoteSchema = {
 		},
 		replyPolicy: {
 			type: 'string',
-			optional: false, nullable: true,
+			optional: true, nullable: true,
 			enum: ['followers', 'following', 'mentioned', 'nobody', null],
 		},
 		quotePolicy: {
 			type: 'string',
-			optional: false, nullable: true,
+			optional: true, nullable: true,
 			enum: ['followers', 'nobody', null],
 		},
 		// arti: whether the viewer may reply / quote (only false when a policy blocks the viewer)
