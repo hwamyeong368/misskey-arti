@@ -74,6 +74,7 @@ const props = withDefaults(defineProps<{
 	transparentBg?: boolean;
 	hasInteractionWithOtherFocusTrappedEls?: boolean;
 	returnFocusTo?: HTMLElement | null;
+	repositionOnResize?: boolean;
 }>(), {
 	manualShowing: null,
 	anchorElement: null,
@@ -84,6 +85,7 @@ const props = withDefaults(defineProps<{
 	transparentBg: false,
 	hasInteractionWithOtherFocusTrappedEls: false,
 	returnFocusTo: null,
+	repositionOnResize: false,
 });
 
 const emit = defineEmits<{
@@ -317,6 +319,7 @@ const alignObserver = new ResizeObserver((entries, observer) => {
 });
 
 onMounted(() => {
+	if (props.repositionOnResize) window.addEventListener('resize', align, { passive: true });
 	watch(() => props.anchorElement, async () => {
 		if (props.anchorElement) {
 			props.anchorElement.style.pointerEvents = 'none';
@@ -348,6 +351,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+	window.removeEventListener('resize', align);
 	alignObserver.disconnect();
 });
 

@@ -101,6 +101,7 @@ export class Paginator<
 	public initialDirection: 'newer' | 'older';
 
 	private offsetMode: boolean;
+	private olderCursorParams: ((lastItem: T) => Partial<E['req']>) | null;
 	public noPaging: boolean;
 	public searchQuery = ref<null | string>('');
 	private searchParamName: keyof E['req'] | 'search';
@@ -128,6 +129,12 @@ export class Paginator<
 		noPaging?: boolean;
 
 		offsetMode?: boolean;
+
+		/**
+		 * サイズ順・名前順など id 以外で並ぶエンドポイント向け。
+		 * 過去方向の読み込みで、最も古い id の代わりに最後に読み込んだ要素から作ったパラメータを渡す
+		 */
+		olderCursorParams?: (lastItem: T) => Partial<E['req']>;
 
 		initialId?: MisskeyEntity['id'];
 		initialDate?: number | null;
@@ -168,6 +175,7 @@ export class Paginator<
 		this.canFetchDetection = props.canFetchDetection ?? null;
 		this.noPaging = props.noPaging ?? false;
 		this.offsetMode = props.offsetMode ?? false;
+		this.olderCursorParams = props.olderCursorParams ?? null;
 		this.canSearch = props.canSearch ?? false;
 		this.searchParamName = props.searchParamName ?? 'search';
 
@@ -192,6 +200,11 @@ export class Paginator<
 			return this.aheadQueue.map(x => x.id).sort().at(-1);
 		}
 		return this.items.value.map(x => x.id).sort().at(-1);
+	}
+
+	private getLastLoadedItem(): T {
+		// fetchOlder は items.value.length === 0 のとき呼ばれないので必ず存在する
+		return (this.order.value === 'oldest' ? this.items.value.at(0) : this.items.value.at(-1))!;
 	}
 
 	private getOldestId(): string | null | undefined {
@@ -286,7 +299,7 @@ export class Paginator<
 			limit: SECOND_FETCH_LIMIT,
 			...(this.offsetMode ? {
 				offset: this.items.value.length,
-			} : {
+			} : this.olderCursorParams ? this.olderCursorParams(this.getLastLoadedItem()) : {
 				untilId: this.getOldestId(),
 			}),
 		};
