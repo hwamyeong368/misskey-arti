@@ -44,7 +44,7 @@ type TokenResponse = {
 	url: string;
 	token: string;
 	iceServers: IceServer[] | null;
-	participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean }[];
+	participants: { identity: string; screenSharing: boolean; micMuted?: boolean; deafened?: boolean; recording?: boolean }[];
 	updatedAt: number;
 };
 

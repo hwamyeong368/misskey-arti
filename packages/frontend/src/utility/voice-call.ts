@@ -86,6 +86,7 @@ let recordingMicBus: GainNode | null = null;
 let recordingOthersBus: GainNode | null = null;
 let recordingMixedDest: MediaStreamAudioDestinationNode | null = null;
 let pendingRecordingUploads: Promise<void>[] = [];
+let recordingConversions: Promise<void> = Promise.resolve();
 let recordingRawMicStream: MediaStream | null = null;
 const recordingSources = new Map<MediaStreamTrack, { source: MediaStreamAudioSourceNode; kind: 'mic' | 'others' }>();
 let recordingCanvas: HTMLCanvasElement | null = null;
@@ -235,8 +236,12 @@ async function uploadRecording(blob: Blob, name: string): Promise<void> {
 	const res = await window.fetch(apiUrl + '/drive/files/create', { method: 'POST', body: form, credentials: 'omit' });
 	if (!res.ok) throw new Error(`failed to upload the recording: ${res.status}`);
 	let file = await res.json() as Misskey.entities.DriveFile;
+	// the server converts one recording per user at a time, so convert the parts one after another
+	const fileId = file.id;
+	const conversion = recordingConversions.then(() => misskeyApi('chat/rooms/voice/convert-recording', { fileId }));
+	recordingConversions = conversion.then(() => {}, () => {});
 	try {
-		const converted = await misskeyApi('chat/rooms/voice/convert-recording', { fileId: file.id });
+		const converted = await conversion;
 		if (converted != null) file = converted;
 	} catch { /* keep the WebM when ffmpeg fails */ }
 	// the recording stays in the drive; it is not posted to the room
@@ -327,7 +332,7 @@ function reportStatus(room: Room, force = false): void {
 		resetStatusDelivery();
 		statusDelivery = { room, latest: status, pending: status, sending: false, retryDelay: 1000, timer: null, stopped: false };
 	} else {
-		if (!force && statusDelivery.latest.micMuted === status.micMuted && statusDelivery.latest.deafened === status.deafened) return;
+		if (!force && statusDelivery.latest.micMuted === status.micMuted && statusDelivery.latest.deafened === status.deafened && statusDelivery.latest.recording === status.recording) return;
 		// 止めたのは失敗した報告の再送だけ。設定が変わったら、新しい設定はもう一度だけ送ってみる
 		// (セッションを確かめる一時的な失敗も ACCESS_DENIED になるので、一度の失敗で通話の残りずっと黙らない)
 		statusDelivery.stopped = false;
@@ -1002,9 +1007,11 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 			addRecordingTrack(track.mediaStreamTrack, 'others');
 			window.document.body.appendChild(track.attach());
 			applyVolume(participant);
-		} else if (track.kind === Track.Kind.Video) {
-			addRecordingVideo(track.mediaStreamTrack, publication.source === Track.Source.ScreenShare);
-		} else if (publication.source === Track.Source.ScreenShare) {
+			return;
+		}
+		// arti: the recording hook must not take the screen share branch, or a remote share is never shown
+		if (track.kind === Track.Kind.Video) addRecordingVideo(track.mediaStreamTrack, publication.source === Track.Source.ScreenShare);
+		if (publication.source === Track.Source.ScreenShare) {
 			screenShareTracks.set(participant.identity, track);
 			for (const view of screenShareViews.get(participant.identity) ?? []) track.attach(view.element);
 		}
@@ -1014,9 +1021,10 @@ function bindRoomEvents(lk: LiveKit, room: Room): void {
 		if (track.kind === Track.Kind.Audio) {
 			removeRecordingTrack(track.mediaStreamTrack);
 			for (const element of track.detach()) element.remove();
-		} else if (track.kind === Track.Kind.Video) {
-			removeRecordingVideo(track.mediaStreamTrack);
-		} else if (publication.source === Track.Source.ScreenShare) {
+			return;
+		}
+		if (track.kind === Track.Kind.Video) removeRecordingVideo(track.mediaStreamTrack);
+		if (publication.source === Track.Source.ScreenShare) {
 			for (const view of screenShareViews.get(participant.identity) ?? []) track.detach(view.element);
 			screenShareTracks.delete(participant.identity);
 		}

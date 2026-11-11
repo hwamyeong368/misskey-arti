@@ -20130,6 +20130,7 @@ export interface operations {
                     sessionId: string;
                     micMuted: boolean;
                     deafened: boolean;
+                    recording?: boolean;
                 };
             };
         };
