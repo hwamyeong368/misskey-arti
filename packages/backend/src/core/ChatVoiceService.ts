@@ -12,7 +12,7 @@
 
 import { Inject, Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 import type { WebhookEvent } from 'livekit-server-sdk';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository, ChatRoomsRepository, UsersRepository } from '@/models/_.js';
@@ -459,9 +459,11 @@ export class ChatVoiceService implements OnModuleInit, OnApplicationShutdown {
 
 		const parsed = parseChatRoomVoiceState(actor.uri, object, MAX_ROOM_MEMBERS + 1);
 		if (!parsed.ok) return `skip: ${parsed.reason}`;
-		const { roomId, participants, updatedAt } = parsed.state;
+		const { roomUri, roomId, participants, updatedAt } = parsed.state;
 
-		const room = await this.chatRoomsRepository.findOne({ where: { id: roomId }, relations: { owner: true } });
+		// ルームの番号はそのサーバーの中でしか一意でないので URI で探す。URI を持たないのは、id が番号のままの古いミラー
+		const room = await this.chatRoomsRepository.findOne({ where: { uri: roomUri }, relations: { owner: true } })
+			?? await this.chatRoomsRepository.findOne({ where: { id: roomId, uri: IsNull() }, relations: { owner: true } });
 		if (room == null) return 'skip: unknown room';
 		if (room.ownerId !== actor.id) return 'skip: sender does not own the room';
 

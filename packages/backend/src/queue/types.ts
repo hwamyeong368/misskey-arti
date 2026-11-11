@@ -64,6 +64,11 @@ export type DbJobMap = {
 	deleteAccount: DbUserDeleteJobData;
 	truncateAccount: DbUserTruncateJobData;
 	truncateAccountKeepDrive: DbUserTruncateJobData;
+	chatRoomRosterSync: ChatRoomRosterSyncJobData;
+};
+
+export type ChatRoomRosterSyncJobData = {
+	roomId: string;
 };
 
 export type DbJobDataWithUser = {

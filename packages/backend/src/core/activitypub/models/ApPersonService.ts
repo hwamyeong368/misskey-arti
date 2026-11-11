@@ -16,6 +16,7 @@ import { truncate } from '@/misc/truncate.js';
 import type { CacheService } from '@/core/CacheService.js';
 import { normalizeTag } from '@/misc/normalize-tag.js';
 import { isDuplicateKeyValueError } from '@/misc/is-duplicate-key-value-error.js';
+import { normalizeChatScope } from '@/core/activitypub/misc/chat-payloads.js';
 import type Logger from '@/logger.js';
 import type { MiNote } from '@/models/Note.js';
 import type { IdService } from '@/core/IdService.js';

@@ -33,6 +33,7 @@ import { ImportBlockingProcessorService } from './processors/ImportBlockingProce
 import { ImportUserListsProcessorService } from './processors/ImportUserListsProcessorService.js';
 import { ImportCustomEmojisProcessorService } from './processors/ImportCustomEmojisProcessorService.js';
 import { ImportAntennasProcessorService } from './processors/ImportAntennasProcessorService.js';
+import { ChatRoomRosterSyncProcessorService } from './processors/ChatRoomRosterSyncProcessorService.js';
 import { DeleteAccountProcessorService } from './processors/DeleteAccountProcessorService.js';
 import { TruncateAccountProcessorService } from './processors/TruncateAccountProcessorService.js';
 import { TruncateAccountKeepDriveProcessorService } from './processors/TruncateAccountKeepDriveProcessorService.js';
@@ -123,6 +124,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 		private importUserListsProcessorService: ImportUserListsProcessorService,
 		private importCustomEmojisProcessorService: ImportCustomEmojisProcessorService,
 		private importAntennasProcessorService: ImportAntennasProcessorService,
+		private chatRoomRosterSyncProcessorService: ChatRoomRosterSyncProcessorService,
 		private deleteAccountProcessorService: DeleteAccountProcessorService,
 		private truncateAccountProcessorService: TruncateAccountProcessorService,
 		private truncateAccountKeepDriveProcessorService: TruncateAccountKeepDriveProcessorService,
@@ -241,6 +243,7 @@ export class QueueProcessorService implements OnApplicationShutdown {
 					case 'deleteAccount': return this.deleteAccountProcessorService.process(job);
 					case 'truncateAccount': return runAsBulkDelivery(() => this.truncateAccountProcessorService.process(job)); // bscone: low delivery priority
 					case 'truncateAccountKeepDrive': return runAsBulkDelivery(() => this.truncateAccountKeepDriveProcessorService.process(job)); // bscone: low delivery priority
+					case 'chatRoomRosterSync': return this.chatRoomRosterSyncProcessorService.process(job);
 					default: throw new Error(`unrecognized job type ${job.name} for db`);
 				}
 			};

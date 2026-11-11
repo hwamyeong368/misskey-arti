@@ -72,6 +72,7 @@ export interface MainEventTypes {
 	unreadAntenna: MiAntenna;
 	newChatMessage: Packed<'ChatMessage'>;
 	chatRoomVoiceState: Packed<'ChatRoomVoiceState'>;
+	chatRoomListChanged: undefined;
 	readAllAnnouncements: undefined;
 	myTokenRegenerated: undefined;
 	signin: {
@@ -167,6 +168,12 @@ export interface AdminEventTypes {
 
 export interface ChatEventTypes {
 	message: Packed<'ChatMessageLite'>;
+	updated: {
+		messageId: MiChatMessage['id'];
+		text: string;
+		editedAt: string;
+		emojis?: Record<string, string>;
+	};
 	deleted: Packed<'ChatMessageLite'>['id'];
 	react: {
 		reaction: string;
@@ -178,6 +185,19 @@ export interface ChatEventTypes {
 		user?: Packed<'UserLite'>;
 		messageId: MiChatMessage['id'];
 	};
+}
+
+// ルームの状態の変化。画面を閉じたり更新したりできるようクライアントへも転送する。
+export interface ChatRoomEventTypes extends ChatEventTypes {
+	roomUpdated: {
+		roomId: MiChatRoom['id'];
+		name: string;
+		description: string;
+		isArchived: boolean;
+	};
+	membershipStarted: { userId: MiUser['id'] };
+	membershipEnded: { userId: MiUser['id'] };
+	roomDeleted: undefined;
 }
 
 export interface ReversiEventTypes {
@@ -320,11 +340,11 @@ export type GlobalEvents = {
 	};
 	chatUser: {
 		name: `chatUserStream:${MiUser['id']}-${MiUser['id']}`;
-		payload: EventTypesToEventPayload<ChatEventTypes>;
+		payload: EventTypesToEventPayload<ChatRoomEventTypes>;
 	};
 	chatRoom: {
 		name: `chatRoomStream:${MiChatRoom['id']}`;
-		payload: EventTypesToEventPayload<ChatEventTypes>;
+		payload: EventTypesToEventPayload<ChatRoomEventTypes>;
 	};
 	reversi: {
 		name: `reversiStream:${MiUser['id']}`;
@@ -438,7 +458,7 @@ export class GlobalEventService {
 	}
 
 	@bindThis
-	public publishChatRoomStream<K extends keyof ChatEventTypes>(toRoomId: MiChatRoom['id'], type: K, value?: ChatEventTypes[K]): void {
+	public publishChatRoomStream<K extends keyof ChatRoomEventTypes>(toRoomId: MiChatRoom['id'], type: K, value?: ChatRoomEventTypes[K]): void {
 		this.publish(`chatRoomStream:${toRoomId}`, type, typeof value === 'undefined' ? null : value);
 	}
 

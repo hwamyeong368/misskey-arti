@@ -13,10 +13,12 @@ import accepts from 'accepts';
 import vary from 'vary';
 import secureJson from 'secure-json-parse';
 import { DI } from '@/di-symbols.js';
-import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta } from '@/models/_.js';
+import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta, ChatMessagesRepository, ChatRoomsRepository, ChatRoomMembershipsRepository, ChatRoomInvitationsRepository, MiChatRoom } from '@/models/_.js';
 import * as url from '@/misc/prelude/url.js';
 import type { Config } from '@/config.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
+import { chatActorUri, chatMessageUri, chatRoomUriForOwner } from '@/core/activitypub/misc/chat-payloads.js';
+import { ChatRosterService } from '@/core/ChatRosterService.js';
 import { QueueService } from '@/core/QueueService.js';
 import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import { UserKeypairService } from '@/core/UserKeypairService.js';
@@ -27,15 +29,40 @@ import { QueryService } from '@/core/QueryService.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { bindThis } from '@/decorators.js';
-import { IActivity } from '@/core/activitypub/type.js';
+import type { IActivity, IObject } from '@/core/activitypub/type.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
 import * as Acct from '@/misc/acct.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
+import { ApDbResolverService } from '@/core/activitypub/ApDbResolverService.js';
+import { HostPolicyService } from '@/core/HostPolicyService.js';
 import type { FastifyInstance, FastifyRequest, FastifyReply, FastifyPluginOptions, FastifyBodyParser } from 'fastify';
 import type { FindOptionsWhere } from 'typeorm';
 
 const ACTIVITY_JSON = 'application/activity+json; charset=utf-8';
 const LD_JSON = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"; charset=utf-8';
+// @peertube/http-signature prefers an X-Date header over Date when it checks
+// clock skew, so an attacker can replay an old signed request together with a
+// fresh, unsigned X-Date and keep the signature valid. Misskey only ever signs
+// Date, so X-Date is never trusted here and the signed Date is validated
+// explicitly instead of relying on the parser's freshness check alone.
+const SIGNATURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+function isSignedDateFresh(request: FastifyRequest): boolean {
+	if (request.headers['x-date'] != null) return false;
+
+	const date = request.headers.date;
+	if (typeof date !== 'string') return false;
+
+	const signedAt = Date.parse(date);
+	if (Number.isNaN(signedAt)) return false;
+
+	return Math.abs(Date.now() - signedAt) <= SIGNATURE_CLOCK_SKEW_MS;
+}
+
+function hasSignedDate(signature: httpSignature.IParsedSignature): boolean {
+	return signature.params.headers.includes('date')
+		&& !signature.params.headers.includes('x-date');
+}
 
 @Injectable()
 export class ActivityPubServerService {
@@ -70,15 +97,44 @@ export class ActivityPubServerService {
 		@Inject(DI.followRequestsRepository)
 		private followRequestsRepository: FollowRequestsRepository,
 
+		@Inject(DI.chatMessagesRepository)
+		private chatMessagesRepository: ChatMessagesRepository,
+
+		@Inject(DI.chatRoomsRepository)
+		private chatRoomsRepository: ChatRoomsRepository,
+
+		@Inject(DI.chatRoomMembershipsRepository)
+		private chatRoomMembershipsRepository: ChatRoomMembershipsRepository,
+
+		@Inject(DI.chatRoomInvitationsRepository)
+		private chatRoomInvitationsRepository: ChatRoomInvitationsRepository,
+
 		private utilityService: UtilityService,
+		private hostPolicyService: HostPolicyService,
 		private userEntityService: UserEntityService,
 		private apRendererService: ApRendererService,
 		private queueService: QueueService,
 		private userKeypairService: UserKeypairService,
 		private queryService: QueryService,
 		private fanoutTimelineEndpointService: FanoutTimelineEndpointService,
+		private apDbResolverService: ApDbResolverService,
+		private chatRosterService: ChatRosterService,
 	) {
 		//this.createServer = this.createServer.bind(this);
+	}
+
+	/**
+	 * The time is taken first. A change while the list is being read then has a later time than the list,
+	 * so a server comparing the two keeps that change rather than taking the list for newer than it is.
+	 */
+	private async chatRoomRoster(room: MiChatRoom): Promise<Pick<IObject, '_misskey_chatRoomMembers' | '_misskey_chatRoomRosterAt'>> {
+		const rosterAt = new Date().toISOString();
+		const memberships = await this.chatRoomMembershipsRepository.findBy({ roomId: room.id });
+		const members = await this.usersRepository.findBy({ id: In([room.ownerId, ...memberships.map(membership => membership.userId)]) });
+		return {
+			_misskey_chatRoomMembers: members.map(member => chatActorUri(member, this.config.url)),
+			_misskey_chatRoomRosterAt: rosterAt,
+		};
 	}
 
 	@bindThis
@@ -187,6 +243,61 @@ export class ActivityPubServerService {
 		this.queueService.inbox(body as IActivity, signature);
 
 		reply.code(202);
+	}
+
+	/**
+	 * Returns the actor that signed this request with an HTTP Signature, or null.
+	 * Used for participant-only GET endpoints that cannot rely on a local session.
+	 * Only keys that are already known to this instance are accepted, so an
+	 * anonymous request cannot make this instance fetch arbitrary key URLs.
+	 */
+	@bindThis
+	private async getSignedRequestActor(request: FastifyRequest): Promise<MiUser | null> {
+		let signature;
+		try {
+			signature = httpSignature.parseRequest(request.raw, { 'headers': ['(request-target)', 'host', 'date'], authorizationHeaderName: 'signature' });
+		} catch (_) {
+			return null;
+		}
+
+		if (!hasSignedDate(signature) || !isSignedDateFresh(request)) {
+			return null;
+		}
+
+		if (signature.params.headers.indexOf('host') === -1
+			|| request.headers.host !== this.config.host) {
+			return null;
+		}
+
+		const authUser = await this.apDbResolverService.getAuthUserFromKeyId(signature.keyId);
+		if (authUser == null) {
+			return null;
+		}
+
+		try {
+			if (!httpSignature.verifySignature(signature, authUser.key.keyPem)) {
+				return null;
+			}
+		} catch (_) {
+			return null;
+		}
+
+		// Membership survives a suspension, so a suspended account has to be turned away here.
+		return authUser.user.isSuspended ? null : authUser.user;
+	}
+
+	@bindThis
+	private async applyAccessControl(request: FastifyRequest, reply: FastifyReply, allowLimitedHosts = false, resolvedHost?: string | null): Promise<boolean> {
+		// CT does not carry CherryPick's ActivityPubAccessControlService. The chat
+		// endpoints below still require a signed participant (getSignedRequestActor),
+		// which is the part the federation contract depends on.
+		if (this.meta.federation === 'none') {
+			reply.code(403);
+			reply.header('Content-Type', 'text/plain; charset=utf-8');
+			reply.send('Access denied: federation is disabled');
+			return true;
+		}
+		return false;
 	}
 
 	@bindThis
@@ -710,6 +821,166 @@ export class ActivityPubServerService {
 			reply.header('Cache-Control', 'public, max-age=180');
 			this.setResponseType(request, reply);
 			return (this.apRendererService.addContext(await this.packActivity(note)));
+		});
+
+		// chat message
+		fastify.get<{ Params: { id: string; } }>('/chat/messages/:id', { constraints: { apOrHtml: 'ap' } }, async (request, reply) => {
+			vary(reply.raw, 'Accept');
+			reply.header('Cache-Control', 'private, no-store');
+
+			if (this.meta.federation === 'none') {
+				reply.code(403);
+				return;
+			}
+
+			if (await this.applyAccessControl(request, reply, true)) {
+				return;
+			}
+
+			// Direct messages must only be returned to a participant.
+			// The requester is identified by the actor that signed this GET request.
+			const actor = await this.getSignedRequestActor(request);
+			if (actor == null) {
+				reply.code(404);
+				return;
+			}
+			// A host this server refuses (blocked, unfederated or suspended) is answered as missing.
+			if (actor.host != null && await this.hostPolicyService.isRefusedRemoteHost(actor.host)) {
+				reply.code(404);
+				return;
+			}
+
+			const message = await this.chatMessagesRepository.findOneBy({
+				id: request.params.id,
+			});
+
+			if (message == null) {
+				reply.code(404);
+				return;
+			}
+
+			// Get fromUser. A message is out of sight here while its author is suspended, and comes back when that ends.
+			const fromUser = await this.usersRepository.findOneBy({ id: message.fromUserId });
+			if (fromUser == null || fromUser.host !== null || fromUser.isSuspended) {
+				reply.code(404);
+				return;
+			}
+
+			// Get toUser(s)
+			let toUsers: MiUser[] = [];
+			let roomId: string | undefined;
+			let roomUri: string | undefined;
+			if (message.toUserId) {
+				// 1:1 chat
+				if (actor.id !== message.fromUserId && actor.id !== message.toUserId) {
+					reply.code(404);
+					return;
+				}
+				const toUser = await this.usersRepository.findOneBy({ id: message.toUserId });
+				if (toUser) toUsers = [toUser];
+			} else if (message.toRoomId) {
+				const room = await this.chatRoomsRepository.findOne({
+					where: { id: message.toRoomId },
+					relations: { owner: true },
+				});
+				if (room == null) {
+					reply.code(404);
+					return;
+				}
+
+				const isOwner = room.ownerId === actor.id;
+				const membership = isOwner ? null : await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: actor.id });
+				if (!isOwner && membership == null) {
+					// The owner's server may have heard of this member before this one did. Their retry will get the message once it has too.
+					if (room.owner?.host != null) await this.chatRosterService.requestSync(room, actor.id);
+					reply.code(404);
+					return;
+				}
+
+				const owner = room.owner ?? await this.usersRepository.findOneBy({ id: room.ownerId });
+				if (owner == null) {
+					reply.code(404);
+					return;
+				}
+
+				const memberships = await this.chatRoomMembershipsRepository.findBy({ roomId: room.id });
+				const memberIds = Array.from(new Set([room.ownerId, ...memberships.map(membership => membership.userId)]));
+				const members = await this.usersRepository.findBy({ id: In(memberIds) });
+				toUsers = members.filter(member => member.id !== fromUser.id);
+				roomId = room.id;
+				roomUri = chatRoomUriForOwner(room, owner, this.config.url);
+			}
+
+			if (toUsers.length === 0) {
+				reply.code(404);
+				return;
+			}
+
+			if (message.deletedAt != null) {
+				this.setResponseType(request, reply);
+				return this.apRendererService.addContext({ ...this.apRendererService.renderTombstone(chatMessageUri(message, this.config.url)), formerType: 'Note' });
+			}
+
+			this.setResponseType(request, reply);
+			return this.apRendererService.addContext(await this.apRendererService.renderChatMessage(message, fromUser, toUsers, roomId, roomUri));
+		});
+
+		// chat room
+		fastify.get<{ Params: { id: string; } }>('/chat/rooms/:id', { constraints: { apOrHtml: 'ap' } }, async (request, reply) => {
+			vary(reply.raw, 'Accept');
+			reply.header('Cache-Control', 'private, no-store');
+
+			if (this.meta.federation === 'none') {
+				reply.code(403);
+				return;
+			}
+
+			if (await this.applyAccessControl(request, reply, true)) {
+				return;
+			}
+
+			const actor = await this.getSignedRequestActor(request);
+			if (actor == null) {
+				reply.code(404);
+				return;
+			}
+			// A host this server refuses (blocked, unfederated or suspended) is answered as missing.
+			if (actor.host != null && await this.hostPolicyService.isRefusedRemoteHost(actor.host)) {
+				reply.code(404);
+				return;
+			}
+
+			const room = await this.chatRoomsRepository.findOne({
+				where: { id: request.params.id },
+				relations: { owner: true },
+			});
+			if (room == null) {
+				reply.code(404);
+				return;
+			}
+
+			const isOwner = room.ownerId === actor.id;
+			const membership = isOwner ? null : await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: actor.id });
+			if (!isOwner && membership == null) {
+				const invitation = await this.chatRoomInvitationsRepository.findOneBy({ roomId: room.id, userId: actor.id });
+				if (invitation == null) {
+					reply.code(404);
+					return;
+				}
+			}
+
+			const owner = room.owner ?? await this.usersRepository.findOneBy({ id: room.ownerId });
+			if (owner == null) {
+				reply.code(404);
+				return;
+			}
+
+			const group = this.apRendererService.renderChatRoom(room, owner);
+			// Someone who is only invited learns who is in the room by joining it.
+			const roster = owner.host == null && (isOwner || membership != null) ? await this.chatRoomRoster(room) : null;
+
+			this.setResponseType(request, reply);
+			return this.apRendererService.addContext({ ...group, ...roster });
 		});
 
 		// outbox

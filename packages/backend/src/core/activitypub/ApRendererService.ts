@@ -18,26 +18,72 @@ import type { MiNoteReaction } from '@/models/NoteReaction.js';
 import type { MiEmoji } from '@/models/Emoji.js';
 import type { MiPoll } from '@/models/Poll.js';
 import type { MiPollVote } from '@/models/PollVote.js';
+import type { MiChatMessage } from '@/models/ChatMessage.js';
+import type { MiChatRoom } from '@/models/ChatRoom.js';
 import { UserKeypairService } from '@/core/UserKeypairService.js';
 import { MfmService } from '@/core/MfmService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
-import type { MiChatMessage } from '@/models/ChatMessage.js';
-import type { MiChatRoom } from '@/models/ChatRoom.js';
 import type { IChatRoomVoiceState } from '@/core/activitypub/type.js';
-import { chatRoomVoiceStateIdOf } from '@/core/activitypub/misc/chat-room-voice-state.js';
 import { reportedVoiceStatus } from '@/core/voice-participant-status.js';
 import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
+import { RoleService } from '@/core/RoleService.js';
 import { IdService } from '@/core/IdService.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { escapeHtml } from '@/misc/escape-html.js';
 import { JsonLdService } from './JsonLdService.js';
 import { ApMfmService } from './ApMfmService.js';
 import { CONTEXT } from './misc/contexts.js';
-import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IBlock, ICreate, IDelete, IFlag, IFollow, IInvite, IKey, ILike, IMove, IObject, IPost, IQuestion, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
+import { chatRoomVoiceStateIdOf } from './misc/chat-room-voice-state.js';
+import {
+	buildChatDelete,
+	buildChatNote,
+	buildChatReaction,
+	buildChatReactionUndo,
+	buildChatRoomActivityRelay,
+	buildChatRoomDelete,
+	buildChatRoomRelay,
+	buildChatRoomUpdate,
+	buildChatUpdate,
+	type ChatPayloadOptions,
+	chatRoomUriForOwner,
+} from './misc/chat-payloads.js';
+import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IBlock, ICreate, IDelete, IFlag, IFollow, IInvite, IKey, ILike, IMove, IObject, IPost, IQuestion, IRead, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
+
+// Event metadata is user-controlled. Only schema.org Event fields may be copied
+// onto the Note object; anything else could overwrite id, attributedTo, content,
+// to/cc, sensitive, and other security-relevant ActivityPub fields.
+const EVENT_METADATA_KEYS = [
+	'url',
+	'description',
+	'audience',
+	'doorTime',
+	'startDate',
+	'endDate',
+	'eventStatus',
+	'inLanguage',
+	'isAccessibleForFree',
+	'keywords',
+	'location',
+	'offers',
+	'organizer',
+	'performer',
+	'typicalAgeRange',
+] as const;
+
+function sanitizeEventMetadata(metadata: unknown): Record<string, unknown> {
+	if (typeof metadata !== 'object' || metadata == null || Array.isArray(metadata)) return {};
+
+	const source = metadata as Record<string, unknown>;
+	const result: Record<string, unknown> = {};
+	for (const key of EVENT_METADATA_KEYS) {
+		if (Object.hasOwn(source, key)) result[key] = source[key];
+	}
+	return result;
+}
 
 @Injectable()
 export class ApRendererService {
@@ -72,6 +118,7 @@ export class ApRendererService {
 		private mfmService: MfmService,
 		private idService: IdService,
 		private utilityService: UtilityService,
+		private roleService: RoleService,
 	) {
 	}
 
@@ -548,6 +595,8 @@ export class ApRendererService {
 				: field.value,
 		}));
 
+		const policies = await this.roleService.getUserPolicies(user.id);
+
 		const emojis = await this.getEmojis(user.emojis);
 		const apemojis = emojis.filter(emoji => !emoji.localOnly).map(emoji => this.renderEmoji(emoji));
 
@@ -579,6 +628,8 @@ export class ApRendererService {
 			_misskey_requireSigninToViewContents: user.requireSigninToViewContents,
 			_misskey_makeNotesFollowersOnlyBefore: user.makeNotesFollowersOnlyBefore,
 			_misskey_makeNotesHiddenBefore: user.makeNotesHiddenBefore,
+			_misskey_canChat: policies.chatAvailability !== 'unavailable',
+			_misskey_chatScope: user.chatScope,
 			icon: avatar ? this.renderImage(avatar) : isSystem ? this.renderSystemAvatar(user) : this.renderIdenticon(user),
 			image: banner ? this.renderImage(banner) : isSystem ? this.renderSystemBanner() : null,
 			tag,
@@ -789,49 +840,137 @@ export class ApRendererService {
 	 * arti: Renders a chat message as a Note with the legacy `_misskey_talk` flag (format from CherryPick)
 	 */
 	@bindThis
-	public async renderChatMessage(message: MiChatMessage, fromUser: MiUser, toUsers: MiUser[], roomId?: string): Promise<IPost> {
-		// arti: CherryPick treats a message with exactly one recipient as a 1:1 chat,
-		// so a room message must list every member (the sender included).
-		const recipients = roomId != null ? toUsers : toUsers.filter(user => user.id !== fromUser.id);
-		const to = recipients
-			.map(user => this.userEntityService.isRemoteUser(user) ? user.uri : this.userEntityService.genLocalUserUri(user.id));
+	public async renderChatMessage(message: any, fromUser: MiUser, toUsers: MiUser[], roomId?: string, roomUri?: string): Promise<IPost> {
+		return buildChatNote(message, fromUser, toUsers, roomId, await this.chatPayloadOptions(message, roomUri));
+	}
 
-		const file = message.fileId ? await this.driveFilesRepository.findOneBy({ id: message.fileId }) : null;
+	private async chatPayloadOptions(message: any, roomUri?: string): Promise<ChatPayloadOptions> {
+		// Files are not referred to by a foreign key, so one can be gone by now. The database returns them in no particular order.
+		const fileIds: MiDriveFile['id'][] = message.fileIds ?? [];
+		const files = fileIds.length > 0 ? await this.driveFilesRepository.findBy({ id: In(fileIds) }) : [];
+		const attachment = fileIds.map(id => files.find(file => file.id === id)).filter(file => file != null).map(file => this.renderDocument(file));
 
 		const emojis = await this.getEmojis(message.emojis);
 		const apemojis = emojis.filter(emoji => !emoji.localOnly).map(emoji => this.renderEmoji(emoji));
 
-		const text = message.text ?? '';
-
-		const note: IPost = {
-			id: `${this.config.url}/chat/messages/${message.id}`,
-			type: 'Note',
-			attributedTo: this.userEntityService.genLocalUserUri(fromUser.id),
-			content: this.mfmService.toHtml(mfm.parse(text)) ?? '',
-			_misskey_content: text,
-			source: {
-				content: text,
-				mediaType: 'text/x.misskeymarkdown',
-			},
-			to,
+		return {
+			baseUrl: this.config.url,
 			published: this.idService.parse(message.id).date.toISOString(),
-			_misskey_talk: true,
+			roomUri,
+			attachment,
+			tag: apemojis,
 		};
+	}
 
-		// group chat: CherryPick puts the room URI here so the receiver can find the room
-		if (roomId) {
-			note['@context'] = `${this.config.url}/chat/rooms/${roomId}`;
-		}
+	@bindThis
+	public async renderChatUpdate(message: any, fromUser: MiUser, toUsers: MiUser[], roomId?: string, roomUri?: string): Promise<IUpdate> {
+		return buildChatUpdate(message, fromUser, toUsers, roomId, await this.chatPayloadOptions(message, roomUri));
+	}
 
-		if (file) {
-			note.attachment = [this.renderDocument(file)];
-		}
+	@bindThis
+	public renderChatDelete(message: any, fromUser: MiUser, toUsers: MiUser[], roomUri?: string): IDelete {
+		return buildChatDelete(message, fromUser, toUsers, {
+			baseUrl: this.config.url,
+			roomUri,
+			published: new Date().toISOString(),
+		});
+	}
 
-		if (apemojis.length > 0) {
-			note.tag = apemojis;
-		}
+	@bindThis
+	public async renderChatReaction(message: any, actor: MiUser, toUsers: MiUser[], reaction: string, activityId?: string, roomUri?: string): Promise<ILike> {
+		return buildChatReaction(message, actor, toUsers, reaction, {
+			...await this.chatReactionPayloadOptions(reaction),
+			activityId,
+			roomUri,
+		});
+	}
 
-		return note;
+	@bindThis
+	public async renderChatReactionUndo(message: any, actor: MiUser, toUsers: MiUser[], reaction: string, activityId?: string, roomUri?: string): Promise<IUndo> {
+		return buildChatReactionUndo(message, actor, toUsers, reaction, {
+			...await this.chatReactionPayloadOptions(reaction),
+			activityId,
+			roomUri,
+		});
+	}
+
+	private async chatReactionPayloadOptions(reaction: string): Promise<ChatPayloadOptions> {
+		const custom = reaction.match(/^:([\w+-]+)(?:@\.)?:$/);
+		const emoji = custom ? (await this.customEmojiService.localEmojisCache.fetch()).get(custom[1]) : null;
+		return {
+			baseUrl: this.config.url,
+			published: new Date().toISOString(),
+			tag: emoji && !emoji.localOnly ? [this.renderEmoji(emoji)] : undefined,
+		};
+	}
+
+	@bindThis
+	public renderChatRoomUpdate(room: MiChatRoom, owner: MiUser): IUpdate {
+		const now = new Date().toISOString();
+		return buildChatRoomUpdate(this.chatRoomForRender(room, owner), owner, {
+			baseUrl: this.config.url,
+			published: now,
+			updated: now,
+		});
+	}
+
+	@bindThis
+	public renderChatRoomRelay(message: Pick<MiChatMessage, 'id' | 'uri'>, room: Pick<MiChatRoom, 'id' | 'uri'>, owner: MiUser, toUsers: MiUser[], editedAt?: Date): IAnnounce {
+		return buildChatRoomRelay(message, this.chatRoomForRender(room, owner), owner, toUsers, {
+			baseUrl: this.config.url,
+			published: new Date().toISOString(),
+		}, editedAt);
+	}
+
+	@bindThis
+	public renderChatRoomActivityRelay(activity: IObject & { id: string }, room: Pick<MiChatRoom, 'id' | 'uri'>, owner: MiUser, toUsers: MiUser[]): IAnnounce {
+		return buildChatRoomActivityRelay(activity, this.chatRoomForRender(room, owner), owner, toUsers, {
+			baseUrl: this.config.url,
+			published: new Date().toISOString(),
+		});
+	}
+
+	@bindThis
+	public renderChatRoomDelete(room: Pick<MiChatRoom, 'id'>, owner: MiUser): IDelete {
+		return buildChatRoomDelete(this.chatRoomForRender(room, owner), owner, {
+			baseUrl: this.config.url,
+			published: new Date().toISOString(),
+		});
+	}
+
+	@bindThis
+	public renderChatRoom(room: any, owner: MiUser): IObject {
+		const ownerUri = this.userEntityService.isLocalUser(owner)
+			? this.userEntityService.genLocalUserUri(owner.id)
+			: owner.uri;
+
+		return {
+			type: 'Group',
+			id: this.chatRoomUriForRender(room, owner),
+			name: room.name,
+			// Always present, so that a mirror can tell a cleared description from one that was left out.
+			summary: room.description ?? '',
+			attributedTo: ownerUri || undefined,
+			_misskey_chatArchived: room.isArchived,
+			updated: new Date().toISOString(),
+		};
+	}
+
+	private chatRoomForRender<T extends Pick<MiChatRoom, 'id'> & { uri?: string | null; }>(room: T, owner: MiUser): T {
+		const uri = this.chatRoomUriForRender(room, owner);
+		return uri === room.uri ? room : { ...room, uri };
+	}
+
+	private chatRoomUriForRender(room: Pick<MiChatRoom, 'id'> & { uri?: string | null; }, owner: MiUser): string {
+		return chatRoomUriForOwner(room, owner, this.config.url);
+	}
+
+	/**
+	 * このサーバーが持つルームの URI
+	 */
+	@bindThis
+	public genLocalChatRoomUri(roomId: MiChatRoom['id']): string {
+		return `${this.config.url}/chat/rooms/${roomId}`;
 	}
 
 	/**
@@ -847,21 +986,6 @@ export class ApRendererService {
 			room: roomUri,
 			participants: participants.map(p => ({ id: p.identity, screenSharing: p.screenSharing, ...reportedVoiceStatus(p) })),
 			updated: new Date(updatedAt).toISOString(),
-		};
-	}
-
-	@bindThis
-	public renderChatRoom(room: MiChatRoom, owner: MiUser): IObject {
-		const isLocal = owner.uri == null;
-		const ownerUri = isLocal ? this.userEntityService.genLocalUserUri(owner.id) : owner.uri!;
-		const origin = isLocal ? this.config.url : new URL(owner.uri!).origin;
-
-		return {
-			type: 'Group',
-			id: `${origin}/chat/rooms/${room.id}`,
-			name: room.name,
-			summary: room.description || undefined,
-			attributedTo: ownerUri,
 		};
 	}
 }

@@ -32,12 +32,10 @@ export const paramDef = {
 		sessionId: { type: 'string', minLength: 1, maxLength: 128 },
 		micMuted: { type: 'boolean' },
 		deafened: { type: 'boolean' },
-		recording: { type: 'boolean' },
 	},
 	required: ['roomId', 'sessionId', 'micMuted', 'deafened'],
 } as const;
 
-// arti: from choco (chalkpe/cherrypick). Only rooms of this server for now
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
@@ -54,11 +52,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				this.chatRoomMembershipsRepository.exists({ where: { roomId: ps.roomId, userId: me.id } }),
 			]);
 			if (room == null || room.isArchived || me.isSuspended || me.isDeleted || (room.ownerId !== me.id && !member)) throw new ApiError(meta.errors.accessDenied);
-			const status = { micMuted: ps.micMuted, deafened: ps.deafened, recording: ps.recording };
+			const status = { micMuted: ps.micMuted, deafened: ps.deafened };
 			if (room.owner?.host != null) {
 				try {
 					await this.remoteVoiceCallService.reportStatus(me, room, room.owner as MiRemoteUser, ps.sessionId, status);
 				} catch (err) {
+					// 持ち主のサーバーに届けられないのは、通話に入るとき (join) と同じく API のエラーにする。内部エラーにすると、切り替えるたびにエラーログが残る
 					if (err instanceof RemoteVoiceCallError) {
 						switch (err.reason) {
 							case 'unsupported': throw new ApiError(meta.errors.remoteHostUnsupported);

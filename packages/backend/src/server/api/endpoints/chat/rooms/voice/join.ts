@@ -8,12 +8,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { DI } from '@/di-symbols.js';
 import type { ChatRoomMembershipsRepository } from '@/models/_.js';
-import type { MiRemoteUser } from '@/models/User.js';
 import { ChatService } from '@/core/ChatService.js';
 import { ChatVoiceService } from '@/core/ChatVoiceService.js';
-import { RemoteVoiceCallService, RemoteVoiceCallError } from '@/core/RemoteVoiceCallService.js';
 import { LiveKitService } from '@/core/LiveKitService.js';
 import { RoleService } from '@/core/RoleService.js';
+import { RemoteVoiceCallError, RemoteVoiceCallService } from '@/core/RemoteVoiceCallService.js';
+import type { MiRemoteUser } from '@/models/User.js';
 import { ApiError } from '@/server/api/error.js';
 
 export const meta = {
@@ -84,12 +84,12 @@ export const meta = {
 		remoteHostUnsupported: {
 			message: 'The server that owns this room does not support voice calls.',
 			code: 'REMOTE_HOST_UNSUPPORTED',
-			id: '4e71ab43-098d-4c57-84af-39ad6a1a8e37',
+			id: '72d62e31-06b4-4e99-9303-e2663cdbcbf6',
 		},
 		remoteHostUnreachable: {
-			message: 'Could not reach the server that owns this room.',
+			message: 'Could not get a voice call token from the server that owns this room.',
 			code: 'REMOTE_HOST_UNREACHABLE',
-			id: '65a8e792-2bd4-4808-8133-39f1cdcb60b9',
+			id: '5919264c-9150-4eec-9bbb-e31c25973f46',
 		},
 	},
 } as const;
@@ -102,36 +102,59 @@ export const paramDef = {
 	required: ['roomId'],
 } as const;
 
-// arti: from choco (chalkpe/cherrypick). Only rooms of this server for now
 @Injectable()
 export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-disable-line import/no-default-export
 	constructor(
 		private chatService: ChatService,
 		private chatVoiceService: ChatVoiceService,
-		private remoteVoiceCallService: RemoteVoiceCallService,
 		private liveKitService: LiveKitService,
 		private roleService: RoleService,
+		private remoteVoiceCallService: RemoteVoiceCallService,
 
 		@Inject(DI.chatRoomMembershipsRepository)
 		private chatRoomMembershipsRepository: ChatRoomMembershipsRepository,
 	) {
 		super(meta, paramDef, async (ps, me) => {
-			if (!this.liveKitService.isEnabled) {
+			if (!this.liveKitService.isEnabled && !this.remoteVoiceCallService.isEnabled) {
+				throw new ApiError(meta.errors.voiceCallUnavailable);
+			}
+
+			// ルームと、そのメンバーであることを、渡された roomId で同時に読む。ルームがあるかどうかで読むものを変えず、
+			// どちらかが読めなかったときも、ルームがあるかどうかで答えが変わらないようにする
+			let room: Awaited<ReturnType<ChatService['findRoomById']>>;
+			let hasMembership: boolean;
+			try {
+				[room, hasMembership] = await Promise.all([
+					this.chatService.findRoomById(ps.roomId),
+					this.chatRoomMembershipsRepository.exists({ where: { roomId: ps.roomId, userId: me.id } }),
+				]);
+			} catch (err) {
+				// このサーバーに LiveKit が無ければ、読めなかったときも下と同じく最初に断る
+				if (!this.liveKitService.isEnabled) throw new ApiError(meta.errors.voiceCallUnavailable);
+				throw err;
+			}
+			const isMember = room != null && (room.ownerId === me.id || hasMembership);
+			// 他のサーバーが持つルーム (ミラー) の通話はそのサーバーで開かれるので、このサーバーの LiveKit は使わない
+			const remoteOwner = isMember && room != null && room.owner?.host != null ? room.owner as MiRemoteUser : null;
+
+			// このサーバーに LiveKit が無ければ、入れるのはメンバーであるミラーの通話だけ。それ以外は他のサーバーの通話に対応する前と同じく、
+			// まず断る。メンバーでない人には、ルームがあるかも、ミラーかも分からないようにする
+			if (remoteOwner == null && !this.liveKitService.isEnabled) {
 				throw new ApiError(meta.errors.voiceCallUnavailable);
 			}
 
 			// 参加すると話せるので、チャットの書き込み権限を要求する
 			await this.chatService.checkChatAvailability(me.id, 'write');
 
-			const [room, hasMembership] = await Promise.all([
-				this.chatService.findRoomById(ps.roomId),
-				this.chatRoomMembershipsRepository.exists({ where: { roomId: ps.roomId, userId: me.id } }),
-			]);
-			if (room == null || (room.ownerId !== me.id && !hasMembership)) {
+			if (room == null || !isMember) {
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
-			// arti: a room hosted by another server runs its call there
+			if (remoteOwner != null && !this.remoteVoiceCallService.isEnabled) {
+				throw new ApiError(meta.errors.voiceCallUnavailable);
+			}
+
+			// 通話に残れるか (ChatVoiceService の admissionOf) と同じく、削除されたユーザーには発行しない
 			if (room.isArchived || me.isDeleted) {
 				throw new ApiError(meta.errors.voiceCallUnavailable);
 			}
@@ -141,22 +164,22 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.voiceCallUnavailable);
 			}
 
-			if (room.owner?.host != null) {
-				try {
-					return await this.remoteVoiceCallService.requestJoin(me, room, room.owner as MiRemoteUser, policies.canScreenShare);
-				} catch (err) {
-					if (err instanceof RemoteVoiceCallError) {
-						switch (err.reason) {
-							case 'unsupported': throw new ApiError(meta.errors.remoteHostUnsupported);
-							case 'forbidden': throw new ApiError(meta.errors.voiceCallUnavailable);
-							case 'unreachable': throw new ApiError(meta.errors.remoteHostUnreachable);
-						}
-					}
-					throw err;
-				}
+			if (remoteOwner == null) {
+				return await this.chatVoiceService.issueJoinToken(me, room, policies.canScreenShare);
 			}
 
-			return await this.chatVoiceService.issueJoinToken(me, room, policies.canScreenShare);
+			try {
+				return await this.remoteVoiceCallService.requestJoin(me, room, remoteOwner, policies.canScreenShare);
+			} catch (err) {
+				if (err instanceof RemoteVoiceCallError) {
+					switch (err.reason) {
+						case 'unsupported': throw new ApiError(meta.errors.remoteHostUnsupported);
+						case 'forbidden': throw new ApiError(meta.errors.voiceCallUnavailable);
+						case 'unreachable': throw new ApiError(meta.errors.remoteHostUnreachable);
+					}
+				}
+				throw err;
+			}
 		});
 	}
 }
