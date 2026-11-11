@@ -754,3 +754,25 @@ html[data-color-scheme=dark] ._woodenFrame {
 	0% { filter: hue-rotate(0deg) contrast(150%) saturate(150%); }
 	100% { filter: hue-rotate(360deg) contrast(150%) saturate(150%); }
 }
+
+// arti: 페어웰에서 쓰던 기본 글꼴(한컴 산스). 300 = 보통 글씨, 600 = 굵은 글씨로 쓰여요.
+@font-face {
+	font-family: 'HancomSans';
+	src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/2406-1@1.0/HancomSans-Light.woff2') format('woff2');
+	font-weight: 300;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'HancomSans';
+	src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/2406-1@1.0/HancomSans-SemiBold.woff2') format('woff2');
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+
+html,
+body {
+	font-family: 'HancomSans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕', sans-serif;
+}
