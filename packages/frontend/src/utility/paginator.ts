@@ -15,6 +15,15 @@ const FIRST_FETCH_LIMIT = 15;
 // exported so the reconnect catch-up can tell a full page (gap larger than the window) from a partial one
 export const SECOND_FETCH_LIMIT = 30;
 
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+function insertNewestFirstById<T extends { id: string }>(list: T[], incoming: T[]): void {
+	for (const item of incoming) {
+		if (list.some(x => x.id === item.id)) continue;
+		const index = list.findIndex(x => x.id < item.id);
+		list.splice(index === -1 ? list.length : index, 0, item);
+	}
+}
+
 export type MisskeyEntity = {
 	id: string;
 	createdAt: string;
@@ -62,7 +71,9 @@ export interface IPaginator<T = unknown, _T = T & MisskeyEntity> {
 	fetchOlder(): Promise<void>;
 	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 	// resolves with the number of items the server returned (was void upstream)
-	fetchNewer(options?: { toQueue?: boolean }): Promise<number>;
+	fetchNewer(options?: { toQueue?: boolean; insertById?: boolean }): Promise<number>;
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+	refreshHead(): Promise<void>;
 	trim(trigger?: boolean): void;
 	unshiftItems(newItems: (_T)[]): void;
 	pushItems(oldItems: (_T)[]): void;
@@ -189,6 +200,8 @@ export class Paginator<
 		this.reload = this.reload.bind(this);
 		this.fetchOlder = this.fetchOlder.bind(this);
 		this.fetchNewer = this.fetchNewer.bind(this);
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+		this.refreshHead = this.refreshHead.bind(this);
 		this.unshiftItems = this.unshiftItems.bind(this);
 		this.pushItems = this.pushItems.bind(this);
 		this.prepend = this.prepend.bind(this);
@@ -355,7 +368,12 @@ export class Paginator<
 	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 	public async fetchNewer(options: {
 		toQueue?: boolean;
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+		// The stream may prepend newer items while this request is in flight; place the response by id instead of on top.
+		insertById?: boolean;
 	} = {}): Promise<number> {
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+		const insertById = options.insertById === true && !this.offsetMode && this.order.value === 'newest';
 		this.fetchingNewer.value = true;
 
 		const data: E['req'] = {
@@ -386,11 +404,17 @@ export class Paginator<
 		if (options.toQueue) {
 			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 			// the WS channel is already re-subscribed while this request is in flight, so dedupe against the queue
-			this.aheadQueue.unshift(...apiRes.toReversed().filter(x => !this.aheadQueue.some(y => y.id === x.id)));
+			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+			if (insertById) insertNewestFirstById(this.aheadQueue, apiRes);
+			else this.aheadQueue.unshift(...apiRes.toReversed().filter(x => !this.aheadQueue.some(y => y.id === x.id)));
 			if (this.aheadQueue.length > MAX_QUEUE_ITEMS) {
 				this.aheadQueue = this.aheadQueue.slice(0, MAX_QUEUE_ITEMS);
 			}
 			this.queuedAheadItemsCount.value = this.aheadQueue.length;
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+		} else if (insertById) {
+			insertNewestFirstById(this.items.value, apiRes);
+			if (this.useShallowRef) triggerRef(this.items);
 		} else {
 			if (this.order.value === 'oldest') {
 				this.pushItems(apiRes);
@@ -410,6 +434,43 @@ export class Paginator<
 		// 余計な re-render を防ぐために上部で処理している。そのため、ここでは何もしない
 		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 		return apiRes.length;
+	}
+
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+	// Swap the head for the newest page without clearing the list. Needed for grouped notifications: a group
+	// fetched newest-first carries the id of its OLDEST member, so a sinceId fetch re-sends its newer members as a second group.
+	public async refreshHead(): Promise<void> {
+		if (this.offsetMode || this.order.value !== 'newest' || this.initialId != null || this.initialDate != null) {
+			return this.reload();
+		}
+		this.fetchingNewer.value = true;
+		const before = new Set(this.items.value.map(x => x.id));
+
+		const data: E['req'] = {
+			...(typeof this.params === 'function' ? this.params() : this.params),
+			...(this.computedParams ? this.computedParams.value : {}),
+			...(this.searchQuery.value != null && this.searchQuery.value.trim() !== '' ? { [this.searchParamName]: this.searchQuery.value } : {}),
+			limit: this.limit,
+			allowPartial: true,
+		};
+
+		const apiRes = (await misskeyApi<T[]>(this.endpoint, data).catch(_ => {
+			return null;
+		})) as T[] | null;
+
+		this.fetchingNewer.value = false;
+		if (apiRes == null) return;
+
+		// Keep what the stream delivered after the server took its snapshot. Anything not newer than the
+		// snapshot's newest entry is already in the response, possibly folded into a group under another id.
+		const returned = new Set(apiRes.map(x => x.id));
+		const snapshotNewest = Math.max(...apiRes.map(x => Date.parse(x.createdAt)));
+		const arrived = this.items.value.filter(x => !before.has(x.id) && !returned.has(x.id) && Date.parse(x.createdAt) > snapshotNewest);
+
+		this.items.value = [...arrived, ...apiRes];
+		if (this.useShallowRef) triggerRef(this.items);
+
+		this.canFetchOlder.value = this.canFetchDetection === 'limit' ? apiRes.length >= this.limit : apiRes.length > 0 && !this.noPaging;
 	}
 
 	public trim(trigger = true): void {

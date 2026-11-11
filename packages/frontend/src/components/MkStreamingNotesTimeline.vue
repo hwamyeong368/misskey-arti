@@ -279,7 +279,8 @@ async function catchUp() {
 
 	catchingUp = true;
 	const toQueue = !isTop() || isPausingUpdate;
-	const received = await paginator.fetchNewer({ toQueue }).finally(() => {
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+	const received = await paginator.fetchNewer({ toQueue, insertById: true }).finally(() => {
 		catchingUp = false;
 	});
 	if (received < SECOND_FETCH_LIMIT) return;

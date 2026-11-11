@@ -109,7 +109,9 @@ function releaseQueue() {
 	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 	if (reloadPending) {
 		reloadPending = false;
-		reload();
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+		// swap the head in place; a plain reload clears the list and flashes the spinner
+		paginator.refreshHead();
 		scrollToTop(rootEl.value!);
 		return;
 	}
@@ -124,7 +126,8 @@ function onScrollContainerScroll() {
 		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
 		if (reloadPending) {
 			reloadPending = false;
-			reload();
+			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+			paginator.refreshHead();
 			return;
 		}
 		paginator.releaseQueue();
@@ -170,9 +173,24 @@ async function catchUp() {
 		return;
 	}
 
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+	// A grouped entry cannot be extended through sinceId (see Paginator.refreshHead), so swap the head instead.
+	if (prefer.s.useGroupedNotifications) {
+		if (!isTop() || isPausingUpdate) {
+			reloadPending = true;
+			return;
+		}
+		catchingUp = true;
+		await paginator.refreshHead().finally(() => {
+			catchingUp = false;
+		});
+		return;
+	}
+
 	catchingUp = true;
 	const toQueue = !isTop() || isPausingUpdate;
-	const received = await paginator.fetchNewer({ toQueue }).finally(() => {
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+	const received = await paginator.fetchNewer({ toQueue, insertById: true }).finally(() => {
 		catchingUp = false;
 	});
 	if (received < SECOND_FETCH_LIMIT) return;
@@ -180,7 +198,8 @@ async function catchUp() {
 	if (toQueue) {
 		reloadPending = true;
 	} else {
-		reload();
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+		paginator.refreshHead();
 	}
 }
 
