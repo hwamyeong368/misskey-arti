@@ -59,6 +59,9 @@ export function Layout(props: PropsWithChildren<CommonProps<{
 						<link rel="stylesheet" href={`/vite/${href}`} />
 					))}
 
+					{/* arti: per-server stylesheet; loaded after the app CSS so it can override it */}
+					{props.customCssHash != null ? <link rel="stylesheet" href={`/custom.css?v=${props.customCssHash}`} /> : null}
+
 					{props.titleSlot ?? <title safe>{props.title || 'Misskey'}</title>}
 
 					{props.noindex ? <meta name="robots" content="noindex" /> : null}

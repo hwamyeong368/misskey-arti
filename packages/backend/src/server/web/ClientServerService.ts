@@ -380,6 +380,18 @@ export class ClientServerService {
 		// Manifest
 		fastify.get('/manifest.json', async (request, reply) => await this.manifestHandler(reply));
 
+		// arti: per-server stylesheet (.config/custom.css). Only linked from the HTML when the file exists.
+		fastify.get('/custom.css', async (request, reply) => {
+			const customCss = this.htmlTemplateService.customCss;
+			if (customCss == null) {
+				reply.code(404);
+				return;
+			}
+			reply.header('Content-Type', 'text/css; charset=utf-8');
+			reply.header('Cache-Control', 'public, max-age=86400');
+			return customCss.body;
+		});
+
 		// Embed Javascript
 		fastify.get('/embed.js', async (request, reply) => {
 			return await reply.sendFile('/embed.js', this.staticAssets, {

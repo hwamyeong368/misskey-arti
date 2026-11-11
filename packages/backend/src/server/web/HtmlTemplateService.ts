@@ -4,7 +4,8 @@
  */
 
 import { resolve } from 'node:path';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { languages } from 'i18n/const';
 import { Injectable, Inject } from '@nestjs/common';
 import { DI } from '@/di-symbols.js';
@@ -28,6 +29,8 @@ export class HtmlTemplateService {
 	public frontendEmbedViteFiles: ViteFiles | null = null;
 	public frontendEmbedBootloaderJs: string | null = null;
 	public frontendEmbedBootloaderCss: string | null = null;
+	/** arti: optional per-server stylesheet from .config/custom.css (read once at startup) */
+	public readonly customCss: { body: string; hash: string } | null;
 
 	constructor(
 		@Inject(DI.config)
@@ -40,6 +43,14 @@ export class HtmlTemplateService {
 	) {
 		this.frontendViteBuilt = resolve(this.config.rootDir, 'built/_frontend_vite_');
 		this.frontendEmbedViteBuilt = resolve(this.config.rootDir, 'built/_frontend_embed_vite_');
+
+		const customCssPath = resolve(this.config.rootDir, '.config/custom.css');
+		if (existsSync(customCssPath)) {
+			const body = readFileSync(customCssPath, 'utf-8');
+			this.customCss = { body, hash: createHash('sha256').update(body).digest('hex').slice(0, 12) };
+		} else {
+			this.customCss = null;
+		}
 	}
 
 	// 初期ロードで読み込むべきファイルのパスを収集する。
@@ -174,6 +185,7 @@ export class HtmlTemplateService {
 			frontendEmbedViteFiles: this.frontendEmbedViteFiles,
 			frontendEmbedBootloaderJs: this.frontendEmbedBootloaderJs,
 			frontendEmbedBootloaderCss: this.frontendEmbedBootloaderCss,
+			customCssHash: this.customCss?.hash ?? null,
 		};
 	}
 
