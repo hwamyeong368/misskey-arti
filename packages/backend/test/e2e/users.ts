@@ -126,6 +126,7 @@ describe('ユーザー', () => {
 			autoSensitive: user.autoSensitive,
 			carefulBot: user.carefulBot,
 			autoAcceptFollowed: user.autoAcceptFollowed,
+			notificationRequestsEnabled: user.notificationRequestsEnabled,
 			followApprovalLocalSeconds: user.followApprovalLocalSeconds,
 			followApprovalRemoteSeconds: user.followApprovalRemoteSeconds,
 			noCrawle: user.noCrawle,
@@ -372,6 +373,7 @@ describe('ユーザー', () => {
 		assert.strictEqual(response.autoSensitive, false);
 		assert.strictEqual(response.carefulBot, false);
 		assert.strictEqual(response.autoAcceptFollowed, true);
+		assert.strictEqual(response.notificationRequestsEnabled, false);
 		assert.strictEqual(response.followApprovalLocalSeconds, null);
 		assert.strictEqual(response.followApprovalRemoteSeconds, null);
 		assert.strictEqual(response.noCrawle, false);
