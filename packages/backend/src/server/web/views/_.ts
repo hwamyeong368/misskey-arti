@@ -48,6 +48,8 @@ export type CommonData = MinimumCommonData & {
 	frontendEmbedViteFiles: ViteFiles | null;
 	frontendEmbedBootloaderJs: string | null;
 	frontendEmbedBootloaderCss: string | null;
+	/** arti: content hash of .config/custom.css, null when the server has none */
+	customCssHash?: string | null;
 	metaJson?: string;
 	clientCtxJson?: string;
 };
