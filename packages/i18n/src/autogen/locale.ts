@@ -14340,6 +14340,22 @@ export interface Locale extends ILocale {
          * 翻訳に失敗しました。しばらくしてからもう一度お試しください。
          */
         "translationFailed": string;
+        /**
+         * 翻訳プロバイダー
+         */
+        "provider": string;
+        /**
+         * OpenAI互換 (LLM)
+         */
+        "providerOpenai": string;
+        /**
+         * DeepLのキーは、コントロールパネル → 外部サービス のDeepL設定のものを使用します。ノートに加えて名前とプロフィールもDeepLで翻訳されます。プロバイダーを切り替えるとキャッシュは別々に保存されます。
+         */
+        "deeplKeyNote": string;
+        /**
+         * DeepLの認証キーがまだ設定されていません。外部サービスの設定で入力してください。
+         */
+        "deeplKeyMissing": string;
     };
     /**
      * 雪を降らせる

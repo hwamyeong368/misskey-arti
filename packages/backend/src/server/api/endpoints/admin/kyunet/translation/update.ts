@@ -30,6 +30,7 @@ export const paramDef = {
 	type: 'object',
 	properties: {
 		enabled: { type: 'boolean' },
+		provider: { type: 'string', enum: ['openai', 'deepl'] },
 		baseUrl: { type: 'string', maxLength: 1024, nullable: true },
 		apiKey: { type: 'string', maxLength: 1024 },
 		model: { type: 'string', maxLength: 256, nullable: true },

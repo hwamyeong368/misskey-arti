@@ -3827,4 +3827,8 @@ _kyunetTranslation:
   profiles: "プロフィールを自動で翻訳する"
   profiles_description: "プロフィールページの自己紹介と追加情報を翻訳して表示します。"
   translationFailed: "翻訳に失敗しました。しばらくしてからもう一度お試しください。"
+  provider: "翻訳プロバイダー"
+  providerOpenai: "OpenAI互換 (LLM)"
+  deeplKeyNote: "DeepLのキーは、コントロールパネル → 外部サービス のDeepL設定のものを使用します。ノートに加えて名前とプロフィールもDeepLで翻訳されます。プロバイダーを切り替えるとキャッシュは別々に保存されます。"
+  deeplKeyMissing: "DeepLの認証キーがまだ設定されていません。外部サービスの設定で入力してください。"
 snowEffect: "雪を降らせる"

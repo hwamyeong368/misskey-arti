@@ -168,6 +168,7 @@ import { LoggerService } from './LoggerService.js';
 // kyunet: fork-only LLM translation services
 import { KyunetTranslationSettingService } from './KyunetTranslationSettingService.js';
 import { KyunetTranslationLlmClient } from './KyunetTranslationLlmClient.js';
+import { KyunetTranslationDeeplClient } from './KyunetTranslationDeeplClient.js';
 import { KyunetTranslationService } from './KyunetTranslationService.js';
 import { TelemetryService } from './telemetry/TelemetryService.js';
 import type { Provider } from '@nestjs/common';
@@ -334,6 +335,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 // kyunet: fork-only LLM translation services
 const $KyunetTranslationSettingService: Provider = { provide: 'KyunetTranslationSettingService', useExisting: KyunetTranslationSettingService };
 const $KyunetTranslationLlmClient: Provider = { provide: 'KyunetTranslationLlmClient', useExisting: KyunetTranslationLlmClient };
+const $KyunetTranslationDeeplClient: Provider = { provide: 'KyunetTranslationDeeplClient', useExisting: KyunetTranslationDeeplClient };
 const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService', useExisting: KyunetTranslationService };
 //#endregion
 
@@ -426,6 +428,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		ReversiService,
 		KyunetTranslationSettingService,
 		KyunetTranslationLlmClient,
+		KyunetTranslationDeeplClient,
 		KyunetTranslationService,
 		PageService,
 
@@ -591,6 +594,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$ReversiService,
 		$KyunetTranslationSettingService,
 		$KyunetTranslationLlmClient,
+		$KyunetTranslationDeeplClient,
 		$KyunetTranslationService,
 		$PageService,
 
@@ -756,6 +760,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		ReversiService,
 		KyunetTranslationSettingService,
 		KyunetTranslationLlmClient,
+		KyunetTranslationDeeplClient,
 		KyunetTranslationService,
 		PageService,
 
@@ -919,6 +924,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$ReversiService,
 		$KyunetTranslationSettingService,
 		$KyunetTranslationLlmClient,
+		$KyunetTranslationDeeplClient,
 		$KyunetTranslationService,
 		$PageService,
 

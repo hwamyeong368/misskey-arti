@@ -18,42 +18,55 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<template #label>{{ i18n.ts._kyunetTranslation.enabled }}</template>
 					</MkSwitch>
 
-					<MkInput v-model="form.baseUrl" type="url">
-						<template #prefix><i class="ti ti-link"></i></template>
-						<template #label>{{ i18n.ts._kyunetTranslation.baseUrl }}</template>
-						<template #caption>{{ i18n.ts._kyunetTranslation.baseUrlCaption }}</template>
-					</MkInput>
-					<MkInfo warn>{{ i18n.ts._kyunetTranslation.providerPrivacyWarning }}</MkInfo>
-
-					<MkInput v-model="form.apiKey" type="password" autocomplete="off">
-						<template #prefix><i class="ti ti-key"></i></template>
-						<template #label>{{ i18n.ts._kyunetTranslation.apiKey }} <span v-if="apiKeySet" class="_beta">{{ i18n.ts._kyunetTranslation.apiKeySet }}</span></template>
-						<template #caption>{{ i18n.ts._kyunetTranslation.apiKeyCaption }}</template>
-					</MkInput>
-					<MkButton v-if="apiKeySet" danger @click="deleteApiKey">{{ i18n.ts._kyunetTranslation.deleteApiKey }}</MkButton>
-
-					<MkInput v-model="form.model">
-						<template #prefix><i class="ti ti-cpu"></i></template>
-						<template #label>{{ i18n.ts._kyunetTranslation.model }}</template>
-					</MkInput>
-
-					<MkTextarea v-model="form.extraParams" code>
-						<template #label>{{ i18n.ts._kyunetTranslation.extraParams }}</template>
-						<template #caption>{{ i18n.ts._kyunetTranslation.extraParamsOverrideNote }}</template>
-					</MkTextarea>
-
-					<MkTextarea v-model="form.systemPrompt" tall :placeholder="defaultSystemPrompt">
-						<template #label>{{ i18n.ts._kyunetTranslation.systemPrompt }}</template>
-						<template #caption>{{ i18n.ts._kyunetTranslation.systemPromptCaption }}</template>
-					</MkTextarea>
-
-					<MkSwitch v-model="form.structuredOutput">
-						<template #label>{{ i18n.ts._kyunetTranslation.structuredOutput }}</template>
-					</MkSwitch>
-
-					<MkSelect v-model="maxTokensParam" :items="maxTokensParamDef">
-						<template #label>{{ i18n.ts._kyunetTranslation.maxTokensParam }}</template>
+					<!-- arti: translation backend switch (OpenAI-compatible LLM / DeepL) -->
+					<MkSelect v-model="provider" :items="providerDef">
+						<template #label>{{ i18n.ts._kyunetTranslation.provider }}</template>
 					</MkSelect>
+
+					<template v-if="provider === 'deepl'">
+						<MkInfo>{{ i18n.ts._kyunetTranslation.deeplKeyNote }}</MkInfo>
+						<MkInfo v-if="!deeplAuthKeySet" warn>{{ i18n.ts._kyunetTranslation.deeplKeyMissing }}</MkInfo>
+						<MkInfo warn>{{ i18n.ts._kyunetTranslation.providerPrivacyWarning }}</MkInfo>
+					</template>
+
+					<template v-if="provider === 'openai'">
+						<MkInput v-model="form.baseUrl" type="url">
+							<template #prefix><i class="ti ti-link"></i></template>
+							<template #label>{{ i18n.ts._kyunetTranslation.baseUrl }}</template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.baseUrlCaption }}</template>
+						</MkInput>
+						<MkInfo warn>{{ i18n.ts._kyunetTranslation.providerPrivacyWarning }}</MkInfo>
+
+						<MkInput v-model="form.apiKey" type="password" autocomplete="off">
+							<template #prefix><i class="ti ti-key"></i></template>
+							<template #label>{{ i18n.ts._kyunetTranslation.apiKey }} <span v-if="apiKeySet" class="_beta">{{ i18n.ts._kyunetTranslation.apiKeySet }}</span></template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.apiKeyCaption }}</template>
+						</MkInput>
+						<MkButton v-if="apiKeySet" danger @click="deleteApiKey">{{ i18n.ts._kyunetTranslation.deleteApiKey }}</MkButton>
+
+						<MkInput v-model="form.model">
+							<template #prefix><i class="ti ti-cpu"></i></template>
+							<template #label>{{ i18n.ts._kyunetTranslation.model }}</template>
+						</MkInput>
+
+						<MkTextarea v-model="form.extraParams" code>
+							<template #label>{{ i18n.ts._kyunetTranslation.extraParams }}</template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.extraParamsOverrideNote }}</template>
+						</MkTextarea>
+
+						<MkTextarea v-model="form.systemPrompt" tall :placeholder="defaultSystemPrompt">
+							<template #label>{{ i18n.ts._kyunetTranslation.systemPrompt }}</template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.systemPromptCaption }}</template>
+						</MkTextarea>
+
+						<MkSwitch v-model="form.structuredOutput">
+							<template #label>{{ i18n.ts._kyunetTranslation.structuredOutput }}</template>
+						</MkSwitch>
+
+						<MkSelect v-model="maxTokensParam" :items="maxTokensParamDef">
+							<template #label>{{ i18n.ts._kyunetTranslation.maxTokensParam }}</template>
+						</MkSelect>
+					</template>
 
 					<MkInput v-model="form.timeoutMs" type="number" :min="1000" :max="600000">
 						<template #label>{{ i18n.ts._kyunetTranslation.timeoutMs }}</template>
@@ -179,6 +192,7 @@ type TestRes = Misskey.Endpoints['admin/kyunet/translation/test']['res'];
 const current = await misskeyApi('admin/kyunet/translation/show');
 
 const apiKeySet = ref(current.apiKeySet);
+const deeplAuthKeySet = ref(current.deeplAuthKeySet);
 const stats = ref<Show['stats'] | null>(current.stats);
 const defaultSystemPrompt = current.defaultSystemPrompt;
 
@@ -207,6 +221,14 @@ const { model: maxTokensParam, def: maxTokensParamDef } = useMkSelect({
 	initialValue: current.maxTokensParam,
 });
 
+const { model: provider, def: providerDef } = useMkSelect({
+	items: [
+		{ label: i18n.ts._kyunetTranslation.providerOpenai, value: 'openai' as const },
+		{ label: 'DeepL', value: 'deepl' as const },
+	],
+	initialValue: current.provider,
+});
+
 async function save() {
 	let extraParams: Record<string, unknown>;
 	try {
@@ -218,6 +240,7 @@ async function save() {
 	}
 	await os.apiWithDialog('admin/kyunet/translation/update', {
 		enabled: form.enabled,
+		provider: provider.value,
 		baseUrl: form.baseUrl,
 		...(form.apiKey !== '' ? { apiKey: form.apiKey } : {}),
 		model: form.model,
@@ -248,6 +271,7 @@ async function deleteApiKey() {
 async function reload() {
 	const s = await misskeyApi('admin/kyunet/translation/show');
 	apiKeySet.value = s.apiKeySet;
+	deeplAuthKeySet.value = s.deeplAuthKeySet;
 	stats.value = s.stats;
 }
 
@@ -288,7 +312,7 @@ async function clearOlderThan() {
 }
 
 async function clearByModel() {
-	const { canceled, result } = await os.inputText({ title: i18n.ts._kyunetTranslation.clearByModel, default: form.model });
+	const { canceled, result } = await os.inputText({ title: i18n.ts._kyunetTranslation.clearByModel, default: provider.value === 'deepl' ? 'deepl' : form.model });
 	if (canceled || result == null || result === '') return;
 	await afterClear(await os.apiWithDialog('admin/kyunet/translation/clear-cache', { model: result }));
 }

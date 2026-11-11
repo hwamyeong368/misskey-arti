@@ -11,6 +11,7 @@ import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import type { KyunetTranslationSettingsRepository } from '@/models/_.js';
 import type { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { bindThis } from '@/decorators.js';
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 
@@ -27,6 +28,9 @@ export class KyunetTranslationSettingService implements OnModuleInit, OnApplicat
 	constructor(
 		@Inject(DI.config)
 		private config: Config,
+
+		@Inject(DI.meta)
+		private meta: MiMeta,
 
 		@Inject(DI.redisForPub)
 		private redisForPub: Redis.Redis,
@@ -80,8 +84,10 @@ export class KyunetTranslationSettingService implements OnModuleInit, OnApplicat
 	@bindThis
 	public isAvailable(): boolean {
 		const s = this.cache;
-		if (s == null) return false;
-		return s.enabled && s.baseUrl != null && s.baseUrl.trim() !== '' && s.model != null && s.model.trim() !== '';
+		if (s == null || !s.enabled) return false;
+		// arti: the DeepL provider reuses the instance-wide DeepL key instead of baseUrl / model
+		if (s.provider === 'deepl') return this.meta.deeplAuthKey != null && this.meta.deeplAuthKey !== '';
+		return s.baseUrl != null && s.baseUrl.trim() !== '' && s.model != null && s.model.trim() !== '';
 	}
 
 	@bindThis

@@ -9859,6 +9859,9 @@ export interface operations {
                 content: {
                     'application/json': {
                         enabled: boolean;
+                        /** @enum {string} */
+                        provider: 'openai' | 'deepl';
+                        deeplAuthKeySet: boolean;
                         baseUrl: string | null;
                         apiKeySet: boolean;
                         model: string | null;
@@ -10016,6 +10019,8 @@ export interface operations {
             content: {
                 'application/json': {
                     enabled?: boolean;
+                    /** @enum {string} */
+                    provider?: 'openai' | 'deepl';
                     baseUrl?: string | null;
                     apiKey?: string;
                     model?: string | null;
