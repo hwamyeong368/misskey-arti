@@ -3901,6 +3901,10 @@ export interface Locale extends ILocale {
      */
     "themeColor": string;
     /**
+     * ファイルサイズ（フォルダーは新しい順）
+     */
+    "driveSortSize": string;
+    /**
      * サイズ
      */
     "size": string;
