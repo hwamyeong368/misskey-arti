@@ -9862,6 +9862,11 @@ export interface operations {
                         /** @enum {string} */
                         provider: 'openai' | 'deepl';
                         deeplAuthKeySet: boolean;
+                        deeplUsage: {
+                            count: number;
+                            limit: number;
+                        } | null;
+                        fallbackEnabled: boolean;
                         baseUrl: string | null;
                         apiKeySet: boolean;
                         model: string | null;
@@ -10021,6 +10026,7 @@ export interface operations {
                     enabled?: boolean;
                     /** @enum {string} */
                     provider?: 'openai' | 'deepl';
+                    fallbackEnabled?: boolean;
                     baseUrl?: string | null;
                     apiKey?: string;
                     model?: string | null;

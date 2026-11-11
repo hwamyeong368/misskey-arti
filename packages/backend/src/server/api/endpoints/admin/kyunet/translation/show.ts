@@ -11,6 +11,7 @@ import { Endpoint } from '@/server/api/endpoint-base.js';
 import { KyunetTranslationSettingService } from '@/core/KyunetTranslationSettingService.js';
 import { KyunetTranslationService } from '@/core/KyunetTranslationService.js';
 import { DEFAULT_SYSTEM_PROMPT } from '@/core/KyunetTranslationLlmClient.js';
+import { KyunetTranslationDeeplClient } from '@/core/KyunetTranslationDeeplClient.js';
 
 export const meta = {
 	tags: ['admin', 'kyunet'],
@@ -26,6 +27,15 @@ export const meta = {
 			enabled: { type: 'boolean', optional: false, nullable: false },
 			provider: { type: 'string', optional: false, nullable: false, enum: ['openai', 'deepl'] },
 			deeplAuthKeySet: { type: 'boolean', optional: false, nullable: false },
+			deeplUsage: {
+				type: 'object',
+				optional: false, nullable: true,
+				properties: {
+					count: { type: 'integer', optional: false, nullable: false },
+					limit: { type: 'integer', optional: false, nullable: false },
+				},
+			},
+			fallbackEnabled: { type: 'boolean', optional: false, nullable: false },
 			baseUrl: { type: 'string', optional: false, nullable: true },
 			apiKeySet: { type: 'boolean', optional: false, nullable: false },
 			model: { type: 'string', optional: false, nullable: true },
@@ -72,13 +82,16 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		private kyunetTranslationSettingService: KyunetTranslationSettingService,
 		private kyunetTranslationService: KyunetTranslationService,
+		private kyunetTranslationDeeplClient: KyunetTranslationDeeplClient,
 	) {
 		super(meta, paramDef, async () => {
 			const { id: _id, updatedAt, ...pub } = this.kyunetTranslationSettingService.toPublic();
 			const stats = await this.kyunetTranslationService.getStats();
 			// arti: only whether the instance-wide DeepL key exists; the key itself never leaves the server
 			const deeplAuthKeySet = this.serverSettings.deeplAuthKey != null && this.serverSettings.deeplAuthKey !== '';
-			return { ...pub, deeplAuthKeySet, updatedAt: updatedAt.toISOString(), defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, stats };
+			// arti: this month's DeepL usage (null when there is no key or DeepL could not be reached)
+			const deeplUsage = deeplAuthKeySet ? await this.kyunetTranslationDeeplClient.usage() : null;
+			return { ...pub, deeplAuthKeySet, deeplUsage, updatedAt: updatedAt.toISOString(), defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, stats };
 		});
 	}
 }

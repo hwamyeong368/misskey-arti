@@ -14356,6 +14356,38 @@ export interface Locale extends ILocale {
          * DeepLの認証キーがまだ設定されていません。外部サービスの設定で入力してください。
          */
         "deeplKeyMissing": string;
+        /**
+         * DeepL 今月の使用量
+         */
+        "deeplUsage": string;
+        /**
+         * {count} / {limit} 文字 ({percent}%)
+         */
+        "deeplUsageValue": ParameterizedString<"count" | "limit" | "percent">;
+        /**
+         * 失敗したらもう一方のプロバイダーで再試行
+         */
+        "fallbackEnabled": string;
+        /**
+         * 選んだプロバイダーで翻訳できなかった項目を、もう一方(OpenAI互換LLMまたはDeepL)で翻訳し直します。もう一方が設定済みのときだけ動きます。テキストがもう一方のサービスにも送られます。
+         */
+        "fallbackEnabled_description": string;
+        /**
+         * プロフィールを翻訳
+         */
+        "translateProfile": string;
+        /**
+         * 翻訳を隠す
+         */
+        "hideTranslation": string;
+        /**
+         * もう一度翻訳
+         */
+        "retryTranslation": string;
+        /**
+         * 翻訳中…
+         */
+        "translating": string;
     };
     /**
      * 雪を降らせる

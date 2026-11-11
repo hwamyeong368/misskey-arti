@@ -69,10 +69,15 @@ function nullRef(): Ref<KyunetTranslationResult | null> {
 	return computed(() => null) as unknown as Ref<KyunetTranslationResult | null>;
 }
 
+// keep in sync with backend src/misc/kyunet-note-source.ts (poll choices and image alt text are translated too)
 export function noteSourceText(note: Misskey.entities.Note): string {
 	let text = note.text ?? '';
 	if (note.cw != null) text = `${note.cw}\n-----\n${text}`;
-	return text;
+	const extra: string[] = [];
+	for (const choice of note.poll?.choices ?? []) if (choice.text.trim() !== '') extra.push(`📊 ${choice.text}`);
+	for (const file of note.files ?? []) if (file.comment != null && file.comment.trim() !== '') extra.push(`🖼️ ${file.comment.replace(/\n+/g, ' ')}`);
+	if (extra.length === 0) return text;
+	return text.trim() === '' ? extra.join('\n') : `${text}\n\n${extra.join('\n')}`;
 }
 
 /**

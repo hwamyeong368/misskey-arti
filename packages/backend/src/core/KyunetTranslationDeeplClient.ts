@@ -138,6 +138,35 @@ export class KyunetTranslationDeeplClient {
 		return { items: output, raw: raws.length === 1 ? raws[0] : raws, latencyMs: Date.now() - started };
 	}
 
+	/**
+	 * Characters used / allowed in the current DeepL billing period (GET /v2/usage).
+	 * Returns null when no key is configured or the request fails. The key never leaves this method.
+	 */
+	@bindThis
+	public async usage(timeoutMs = 5000): Promise<{ count: number; limit: number } | null> {
+		const authKey = this.meta.deeplAuthKey;
+		if (authKey == null || authKey === '') return null;
+		const url = (this.meta.deeplIsPro ? DEEPL_PRO_ENDPOINT : DEEPL_FREE_ENDPOINT).replace(/\/translate$/, '/usage');
+		try {
+			const res = await this.httpRequestService.send(url, {
+				method: 'GET',
+				headers: {
+					Accept: 'application/json',
+					Authorization: `DeepL-Auth-Key ${authKey}`,
+				},
+				timeout: timeoutMs,
+			}, { throwErrorWhenResponseNotOk: false, validators: [] });
+			if (!res.ok) return null;
+			const json = await res.json() as { character_count?: unknown; character_limit?: unknown } | null;
+			const count = json?.character_count;
+			const limit = json?.character_limit;
+			if (typeof count !== 'number' || typeof limit !== 'number') return null;
+			return { count, limit };
+		} catch {
+			return null;
+		}
+	}
+
 	private async request(url: string, authKey: string, timeoutMs: number, body: Record<string, unknown>): Promise<unknown> {
 		try {
 			const res = await this.httpRequestService.send(url, {

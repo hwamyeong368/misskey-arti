@@ -31,6 +31,12 @@ export class MiKyunetTranslationSetting {
 	})
 	public provider: KyunetTranslationProvider;
 
+	// arti: when the chosen provider fails, retry the failed items with the other provider (if it is configured)
+	@Column('boolean', {
+		default: false,
+	})
+	public fallbackEnabled: boolean;
+
 	@Column('varchar', {
 		length: 1024, nullable: true,
 	})

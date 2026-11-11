@@ -23,6 +23,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<template #label>{{ i18n.ts._kyunetTranslation.provider }}</template>
 					</MkSelect>
 
+					<!-- arti: retry failed items with the other provider -->
+					<MkSwitch v-model="form.fallbackEnabled">
+						<template #label>{{ i18n.ts._kyunetTranslation.fallbackEnabled }}</template>
+						<template #caption>{{ i18n.ts._kyunetTranslation.fallbackEnabled_description }}</template>
+					</MkSwitch>
+
+					<!-- arti: DeepL usage in the current billing period (also useful when DeepL is only the fallback) -->
+					<MkKeyValue v-if="deeplUsage != null">
+						<template #key>{{ i18n.ts._kyunetTranslation.deeplUsage }}</template>
+						<template #value>{{ i18n.tsx._kyunetTranslation.deeplUsageValue({ count: deeplUsage.count.toLocaleString(), limit: deeplUsage.limit.toLocaleString(), percent: deeplUsage.limit > 0 ? Math.round(deeplUsage.count / deeplUsage.limit * 100) : 0 }) }}</template>
+					</MkKeyValue>
+
 					<template v-if="provider === 'deepl'">
 						<MkInfo>{{ i18n.ts._kyunetTranslation.deeplKeyNote }}</MkInfo>
 						<MkInfo v-if="!deeplAuthKeySet" warn>{{ i18n.ts._kyunetTranslation.deeplKeyMissing }}</MkInfo>
@@ -193,11 +205,13 @@ const current = await misskeyApi('admin/kyunet/translation/show');
 
 const apiKeySet = ref(current.apiKeySet);
 const deeplAuthKeySet = ref(current.deeplAuthKeySet);
+const deeplUsage = ref(current.deeplUsage);
 const stats = ref<Show['stats'] | null>(current.stats);
 const defaultSystemPrompt = current.defaultSystemPrompt;
 
 const form = reactive({
 	enabled: current.enabled,
+	fallbackEnabled: current.fallbackEnabled,
 	baseUrl: current.baseUrl ?? '',
 	apiKey: '',
 	model: current.model ?? '',
@@ -241,6 +255,7 @@ async function save() {
 	await os.apiWithDialog('admin/kyunet/translation/update', {
 		enabled: form.enabled,
 		provider: provider.value,
+		fallbackEnabled: form.fallbackEnabled,
 		baseUrl: form.baseUrl,
 		...(form.apiKey !== '' ? { apiKey: form.apiKey } : {}),
 		model: form.model,
@@ -272,6 +287,7 @@ async function reload() {
 	const s = await misskeyApi('admin/kyunet/translation/show');
 	apiKeySet.value = s.apiKeySet;
 	deeplAuthKeySet.value = s.deeplAuthKeySet;
+	deeplUsage.value = s.deeplUsage;
 	stats.value = s.stats;
 }
 
