@@ -82,6 +82,19 @@ export const meta = {
 			id: 'ed940410-535c-4d5e-bfa3-af798671e93c',
 		},
 
+		// arti: reply / quote policies
+		replyNotAllowed: {
+			message: 'The note does not allow you to reply to it.',
+			code: 'REPLY_NOT_ALLOWED',
+			id: '5e1c8443-cced-4760-b6d8-97bfcf6e3a7c',
+		},
+
+		quoteNotAllowed: {
+			message: 'The note does not allow you to quote it.',
+			code: 'QUOTE_NOT_ALLOWED',
+			id: '00457c24-eb15-4734-afd5-2167ceed03a1',
+		},
+
 		cannotCreateAlreadyExpiredPoll: {
 			message: 'Poll is already expired.',
 			code: 'CANNOT_CREATE_ALREADY_EXPIRED_POLL',
@@ -136,6 +149,9 @@ export const paramDef = {
 		cw: { type: 'string', nullable: true, minLength: 1, maxLength: 100 },
 		localOnly: { type: 'boolean', default: false },
 		reactionAcceptance: { type: 'string', nullable: true, enum: [null, 'likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote'], default: null },
+		// arti: who may reply / quote (null = everyone)
+		replyPolicy: { type: 'string', nullable: true, enum: [null, 'followers', 'following', 'mentioned', 'nobody'], default: null },
+		quotePolicy: { type: 'string', nullable: true, enum: [null, 'followers', 'nobody'], default: null },
 		noExtractMentions: { type: 'boolean', default: false },
 		noExtractHashtags: { type: 'boolean', default: false },
 		noExtractEmojis: { type: 'boolean', default: false },
@@ -235,6 +251,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					cw: ps.cw ?? null,
 					localOnly: ps.localOnly,
 					reactionAcceptance: ps.reactionAcceptance,
+					replyPolicy: ps.replyPolicy ?? null,
+					quotePolicy: ps.quotePolicy ?? null,
 					visibility: ps.visibility,
 					visibleUserIds: ps.visibleUserIds ?? [],
 					channelId: ps.channelId ?? null,
@@ -249,7 +267,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			} catch (err) {
 				// TODO: 他のErrorもここでキャッチしてエラーメッセージを当てるようにしたい
 				if (err instanceof IdentifiableError) {
-					if (err.id === '689ee33f-f97c-479a-ac49-1b9f8140af99') {
+					if (err.id === '1b196060-9f96-4cee-8221-1657d4967d2c') {
+						throw new ApiError(meta.errors.replyNotAllowed);
+					} else if (err.id === '6dcb7029-e36f-400c-9e14-a12626535640') {
+						throw new ApiError(meta.errors.quoteNotAllowed);
+					} else if (err.id === '689ee33f-f97c-479a-ac49-1b9f8140af99') {
 						throw new ApiError(meta.errors.containsProhibitedWords);
 					} else if (err.id === '9f466dab-c856-48cd-9e65-ff90ff750580') {
 						throw new ApiError(meta.errors.containsTooManyMentions);

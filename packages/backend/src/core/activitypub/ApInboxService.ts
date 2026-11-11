@@ -43,8 +43,9 @@ import type { MiDriveFile } from '@/models/DriveFile.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { AbuseReportService } from '@/core/AbuseReportService.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
+import { ApQuoteRequestService } from './ApQuoteRequestService.js';
 import { parseRemoteChatDate } from './misc/chat-remote-date.js';
-import { getApHrefNullable, getApId, getApIds, getApType, getOneApId, isAccept, isActor, isAdd, isAnnounce, isBlock, isCollection, isCollectionOrOrderedCollection, isCreate, isDelete, isEmoji, isFlag, isFollow, isInvite, isLike, isMove, isPost, isReject, isRemove, isTombstone, isUndo, isUpdate, validActor, validPost } from './type.js';
+import { getApHrefNullable, getApId, getApIds, getApType, getOneApId, isAccept, isActor, isAdd, isAnnounce, isBlock, isCollection, isCollectionOrOrderedCollection, isCreate, isDelete, isEmoji, isFlag, isFollow, isInvite, isLike, isMove, isPost, isQuoteRequest, isReject, isRemove, isTombstone, isUndo, isUpdate, validActor, validPost } from './type.js';
 import { ApNoteService } from './models/ApNoteService.js';
 import { ApLoggerService } from './ApLoggerService.js';
 import { ApDbResolverService } from './ApDbResolverService.js';
@@ -139,6 +140,7 @@ export class ApInboxService {
 		private apMfmService: ApMfmService,
 		private queueService: QueueService,
 		private globalEventService: GlobalEventService,
+		private apQuoteRequestService: ApQuoteRequestService,
 	) {
 		this.logger = this.apLoggerService.logger;
 	}
@@ -208,6 +210,9 @@ export class ApInboxService {
 			return await this.follow(actor, activity);
 		} else if (isAccept(activity)) {
 			return await this.accept(actor, activity, resolver);
+		} else if (isQuoteRequest(activity)) {
+			// arti: FEP-044f
+			return await this.apQuoteRequestService.handle(actor, activity);
 		} else if (isReject(activity)) {
 			return await this.reject(actor, activity, resolver);
 		} else if (isAdd(activity)) {

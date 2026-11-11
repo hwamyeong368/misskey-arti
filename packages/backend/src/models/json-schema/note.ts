@@ -211,6 +211,25 @@ export const packedNoteSchema = {
 			optional: false, nullable: true,
 			enum: ['likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote', null],
 		},
+		replyPolicy: {
+			type: 'string',
+			optional: false, nullable: true,
+			enum: ['followers', 'following', 'mentioned', 'nobody', null],
+		},
+		quotePolicy: {
+			type: 'string',
+			optional: false, nullable: true,
+			enum: ['followers', 'nobody', null],
+		},
+		// arti: whether the viewer may reply / quote (only false when a policy blocks the viewer)
+		canReply: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
+		canQuote: {
+			type: 'boolean',
+			optional: true, nullable: false,
+		},
 		reactionEmojis: {
 			type: 'object',
 			optional: false, nullable: false,

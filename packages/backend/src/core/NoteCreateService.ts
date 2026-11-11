@@ -54,6 +54,7 @@ import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { isReply } from '@/misc/is-reply.js';
 import { trackPromise } from '@/misc/promise-tracker.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
+import { NoteInteractionPolicyService } from '@/core/NoteInteractionPolicyService.js';
 import { CollapsedQueue } from '@/misc/collapsed-queue.js';
 import { CacheService } from '@/core/CacheService.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
@@ -178,6 +179,8 @@ type Option = {
 	poll?: IPoll | null;
 	localOnly?: boolean | null;
 	reactionAcceptance?: MiNote['reactionAcceptance'];
+	replyPolicy?: MiNote['replyPolicy'];
+	quotePolicy?: MiNote['quotePolicy'];
 	cw?: string | null;
 	visibility?: string;
 	visibleUsers?: MinimumUser[] | null;
@@ -270,6 +273,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		private utilityService: UtilityService,
 		private userBlockingService: UserBlockingService,
 		private cacheService: CacheService,
+		private noteInteractionPolicyService: NoteInteractionPolicyService,
 	) {
 		this.updateNotesCountQueue = new CollapsedQueue(process.env.NODE_ENV !== 'test' ? 60 * 1000 * 5 : 0, this.collapseNotesCount, this.performUpdateNotesCount);
 	}
@@ -293,6 +297,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 		channelId: MiChannel['id'] | null;
 		localOnly: boolean;
 		reactionAcceptance: MiNote['reactionAcceptance'];
+		replyPolicy?: MiNote['replyPolicy'];
+		quotePolicy?: MiNote['quotePolicy'];
 		poll: IPoll | null;
 		apMentions?: MinimumUser[] | null;
 		apHashtags?: string[] | null;
@@ -357,6 +363,12 @@ export class NoteCreateService implements OnApplicationShutdown {
 				throw new IdentifiableError('48d7a997-da5c-4716-b3c3-92db3f37bf7d', 'Renote target visibility');
 			}
 
+			// arti: the quoted note's quote policy (a plain renote is not a quote)
+			const isQuoting = data.text != null || data.fileIds.length > 0 || data.poll != null;
+			if (isQuoting && !(await this.noteInteractionPolicyService.isAllowed(renote, 'quote', user.id))) {
+				throw new IdentifiableError('6dcb7029-e36f-400c-9e14-a12626535640', 'The note does not allow you to quote it');
+			}
+
 			if (renote.channelId && renote.channelId !== data.channelId) {
 				// チャンネルのノートに対しリノート要求がきたとき、チャンネル外へのリノート可否をチェック
 				// リノートのユースケースのうち、チャンネル内→チャンネル外は少数だと考えられるため、JOINはせず必要な時に都度取得する
@@ -401,6 +413,11 @@ export class NoteCreateService implements OnApplicationShutdown {
 					throw new IdentifiableError('b0df6025-f2e8-44b4-a26a-17ad99104612', 'You have been blocked by the user');
 				}
 			}
+
+			// arti: the reply target's reply policy
+			if (!(await this.noteInteractionPolicyService.isAllowed(reply, 'reply', user.id))) {
+				throw new IdentifiableError('1b196060-9f96-4cee-8221-1657d4967d2c', 'The note does not allow you to reply to it');
+			}
 		}
 
 		if (data.poll) {
@@ -430,6 +447,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 			cw: data.cw,
 			localOnly: data.localOnly,
 			reactionAcceptance: data.reactionAcceptance,
+			replyPolicy: data.replyPolicy ?? null,
+			quotePolicy: data.quotePolicy ?? null,
 			visibility: data.visibility,
 			visibleUsers,
 			channel,
@@ -668,6 +687,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 			userId: user.id,
 			localOnly: data.localOnly!,
 			reactionAcceptance: data.reactionAcceptance ?? null,
+			replyPolicy: data.replyPolicy ?? null,
+			quotePolicy: data.quotePolicy ?? null,
 			visibility: data.visibility as any,
 			visibleUserIds: data.visibility === 'specified'
 				? data.visibleUsers

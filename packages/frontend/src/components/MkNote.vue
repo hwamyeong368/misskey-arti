@@ -129,7 +129,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 			</MkReactionsViewer>
 			<footer :class="$style.footer">
-				<button :class="$style.footerButton" class="_button" @click.stop="reply()">
+				<button :class="$style.footerButton" class="_button" :disabled="appearNote.canReply === false" :title="appearNote.canReply === false ? i18n.ts._interactionPolicy.replyRestricted : undefined" @click.stop="reply()">
 					<i class="ti ti-arrow-back-up"></i>
 					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
 				</button>

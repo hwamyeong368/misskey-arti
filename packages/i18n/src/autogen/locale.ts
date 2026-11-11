@@ -14393,4 +14393,38 @@ export interface Locale extends ILocale {
      * 雪を降らせる
      */
     "snowEffect": string;
+    "_interactionPolicy": {
+        /**
+         * 返信できる人
+         */
+        "replyPolicy": string;
+        /**
+         * 引用できる人
+         */
+        "quotePolicy": string;
+        /**
+         * 全員
+         */
+        "everyone": string;
+        /**
+         * フォロワー
+         */
+        "followers": string;
+        /**
+         * フォロー中のユーザー
+         */
+        "following": string;
+        /**
+         * メンションしたユーザー
+         */
+        "mentioned": string;
+        /**
+         * 自分のみ
+         */
+        "nobody": string;
+        /**
+         * このノートは返信が制限されています
+         */
+        "replyRestricted": string;
+    };
 }

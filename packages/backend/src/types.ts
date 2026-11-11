@@ -60,6 +60,10 @@ export const noteVisibilities = ['public', 'home', 'followers', 'specified'] as 
 
 export const noteReactionAcceptances = ['likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote', null] as const;
 
+// arti: who may reply to / quote a note. null means everyone. The author is always allowed.
+export const noteReplyPolicies = ['followers', 'following', 'mentioned', 'nobody', null] as const;
+export const noteQuotePolicies = ['followers', 'nobody', null] as const;
+
 export const mutedNoteReasons = ['word', 'manual', 'spam', 'other'] as const;
 
 export const followingVisibilities = ['public', 'followers', 'private'] as const;

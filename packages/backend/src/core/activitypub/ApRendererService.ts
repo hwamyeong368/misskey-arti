@@ -532,6 +532,22 @@ export class ApRendererService {
 			})),
 		} as const : {};
 
+		// arti: who may quote / reply, in the GoToSocial / Mastodon 4.5 vocabulary (FEP-044f)
+		const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
+		const audienceFor = (policy: string | null): string[] => {
+			switch (policy) {
+				case null: return [PUBLIC];
+				case 'followers': return [`${attributedTo}/followers`];
+				case 'following': return [`${attributedTo}/following`];
+				case 'mentioned': return [attributedTo, ...mentionedUsers.map(u => u.uri ?? this.userEntityService.genLocalUserUri(u.id))];
+				default: return [attributedTo];
+			}
+		};
+		const interactionPolicy = {
+			canQuote: { automaticApproval: audienceFor(note.quotePolicy ?? null), manualApproval: [] },
+			canReply: { automaticApproval: audienceFor(note.replyPolicy ?? null), manualApproval: [] },
+		};
+
 		return {
 			id: `${this.config.url}/notes/${note.id}`,
 			type: 'Note',
@@ -547,6 +563,8 @@ export class ApRendererService {
 			}),
 			_misskey_quote: quote,
 			quoteUrl: quote,
+			quote,
+			interactionPolicy,
 			published: this.idService.parse(note.id).date.toISOString(),
 			updated: note.updatedAt?.toISOString() ?? undefined,
 			to,

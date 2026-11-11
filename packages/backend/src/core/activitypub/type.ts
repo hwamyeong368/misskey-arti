@@ -141,7 +141,22 @@ export interface IPost extends IObject {
 	// arti: chat message federation (legacy Misskey talk format, from CherryPick)
 	_misskey_talk?: boolean;
 	quoteUrl?: string;
+	// arti: FEP-044f quote posts (Mastodon 4.5+)
+	quote?: string;
+	quoteUri?: string;
+	quoteAuthorization?: string;
+	interactionPolicy?: unknown;
 }
+
+// arti: FEP-044f quote request (Mastodon 4.5+). `object` is the quoted note, `instrument` the quoting post.
+export interface IQuoteRequest extends IObject {
+	type: 'QuoteRequest';
+	actor: IObject | string;
+	object: IObject | string;
+	instrument?: IObject | string;
+}
+
+export const isQuoteRequest = (object: IObject): object is IQuoteRequest => getApType(object) === 'QuoteRequest';
 
 export interface IQuestion extends IObject {
 	type: 'Note' | 'Question';

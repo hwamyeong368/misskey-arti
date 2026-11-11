@@ -49,6 +49,7 @@ import { MiModerationLog } from '@/models/ModerationLog.js';
 import { MiMuting } from '@/models/Muting.js';
 import { MiNote } from '@/models/Note.js';
 import { MiNoteDraft } from '@/models/NoteDraft.js';
+import { MiNoteQuoteAuthorization } from '@/models/NoteQuoteAuthorization.js';
 import { MiNoteFavorite } from '@/models/NoteFavorite.js';
 import { MiNoteReaction } from '@/models/NoteReaction.js';
 import { MiNoteRevision } from '@/models/NoteRevision.js';
@@ -134,6 +135,7 @@ export {
 	MiRenoteMuting,
 	MiNote,
 	MiNoteDraft,
+	MiNoteQuoteAuthorization,
 	MiNoteFavorite,
 	MiNoteReaction,
 	MiNoteRevision,
@@ -219,6 +221,7 @@ export type MutingsRepository = Repository<MiMuting> & MiRepository<MiMuting>;
 export type RenoteMutingsRepository = Repository<MiRenoteMuting> & MiRepository<MiRenoteMuting>;
 export type NotesRepository = Repository<MiNote> & MiRepository<MiNote>;
 export type NoteDraftsRepository = Repository<MiNoteDraft> & MiRepository<MiNoteDraft>;
+export type NoteQuoteAuthorizationsRepository = Repository<MiNoteQuoteAuthorization> & MiRepository<MiNoteQuoteAuthorization>;
 export type NoteFavoritesRepository = Repository<MiNoteFavorite> & MiRepository<MiNoteFavorite>;
 export type NoteReactionsRepository = Repository<MiNoteReaction> & MiRepository<MiNoteReaction>;
 export type NoteRevisionsRepository = Repository<MiNoteRevision> & MiRepository<MiNoteRevision>;
