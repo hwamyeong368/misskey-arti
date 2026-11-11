@@ -21,13 +21,22 @@ import XHome from './home.home.vue';
 import XInvitations from './home.invitations.vue';
 import XJoiningRooms from './home.joiningRooms.vue';
 import XOwnedRooms from './home.ownedRooms.vue';
+import type { PageHeaderItem } from '@/types/page-header.js';
 import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import MkPolkadots from '@/components/MkPolkadots.vue';
+import { globalEvents } from '@/events.js';
+import { $i } from '@/i.js';
 
 const tab = ref('home');
 
-const headerActions = computed(() => []);
+const headerActions = computed<PageHeaderItem[]>(() => $i?.policies.chatAvailability === 'available' ? [{
+	icon: 'ti ti-plus',
+	text: i18n.ts.startChat,
+	handler: (ev) => {
+		globalEvents.emit('createChat', ev);
+	},
+}] : []);
 
 const headerTabs = computed(() => [{
 	key: 'home',

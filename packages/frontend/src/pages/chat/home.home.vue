@@ -5,9 +5,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div class="_gaps">
-	<MkButton v-if="$i.policies.chatAvailability === 'available'" primary gradate rounded :class="$style.start" @click="start"><i class="ti ti-plus"></i> {{ i18n.ts.startChat }}</MkButton>
+	<!-- <MkButton v-if="$i.policies.chatAvailability === 'available' && !isMobile" primary gradate rounded :class="$style.start" @click="start"><i class="ti ti-plus"></i> {{ i18n.ts.startChat }}</MkButton> -->
 
-	<MkInfo v-else>{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts._chat.chatIsReadOnlyForThisAccountOrServer : i18n.ts._chat.chatNotAvailableForThisAccountOrServer }}</MkInfo>
+	<MkInfo v-if="$i.policies.chatAvailability !== 'available'">{{ $i.policies.chatAvailability === 'readonly' ? i18n.ts._chat.chatIsReadOnlyForThisAccountOrServer : i18n.ts._chat.chatNotAvailableForThisAccountOrServer }}</MkInfo>
 
 	<MkAd :preferForms="['horizontal', 'horizontal-big']"/>
 
@@ -40,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onActivated, onDeactivated, onMounted, ref } from 'vue';
+import { onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import XMessage from './XMessage.vue';
@@ -55,6 +55,17 @@ import MkInput from '@/components/MkInput.vue';
 import MkFoldableSection from '@/components/MkFoldableSection.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import MkChatHistories from '@/components/MkChatHistories.vue';
+import { deviceKind } from '@/utility/device-kind.js';
+import { globalEvents } from '@/events.js';
+
+const MOBILE_THRESHOLD = 500;
+
+const isMobile = ref(deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD);
+const handleResize = () => {
+	isMobile.value = deviceKind === 'smartphone' || window.innerWidth <= MOBILE_THRESHOLD;
+};
+
+window.addEventListener('resize', handleResize);
 
 const $i = ensureSignin();
 
@@ -64,7 +75,7 @@ const searchQuery = ref('');
 const searched = ref(false);
 const searchResults = ref<Misskey.entities.ChatMessage[]>([]);
 
-function start(ev: PointerEvent) {
+function start(ev: MouseEvent) {
 	os.popupMenu([{
 		text: i18n.ts._chat.individualChat,
 		caption: i18n.ts._chat.individualChat_description,
@@ -85,7 +96,7 @@ function start(ev: PointerEvent) {
 
 async function startUser() {
 	// TODO: localOnly は連合に対応したら消す
-	os.selectUser({ localOnly: true }).then(user => {
+	os.selectUser({ localOnly: false }).then(user => {
 		router.push('/chat/user/:userId', {
 			params: {
 				userId: user.id,
@@ -98,6 +109,7 @@ async function createRoom() {
 	const { canceled, result } = await os.inputText({
 		title: i18n.ts.name,
 		minLength: 1,
+		hideMinLengthUntilInput: true,
 	});
 	if (canceled) return;
 
@@ -123,6 +135,11 @@ async function search() {
 
 onMounted(() => {
 	updateCurrentAccount({ hasUnreadChatMessages: false });
+	globalEvents.on('createChat', (ev) => start(ev));
+});
+
+onUnmounted(() => {
+	window.removeEventListener('resize', handleResize);
 });
 </script>
 
