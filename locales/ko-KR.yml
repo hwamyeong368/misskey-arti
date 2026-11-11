@@ -3725,3 +3725,11 @@ _kyunetTranslation:
   retryTranslation: "다시 번역"
   translating: "번역 중…"
 snowEffect: "눈 내리기"
+_notificationRequests:
+  title: "모르는 사람"
+  enable: "모르는 사람 알림 따로 모으기"
+  enableDescription: "서로 팔로우 관계가 없는 사람의 멘션·답글·인용을 '모르는 사람' 탭에 따로 모아요. 푸시 알림은 오지 않아요."
+  description: "서로 팔로우 관계가 없는 사람의 멘션·답글·인용이에요. '알림 받기'를 누르면 그 사람 알림은 다음부터 일반 알림으로 와요."
+  allow: "알림 받기"
+  clear: "모두 지우기"
+  clearConfirm: "모르는 사람 알림을 모두 지울까요?"

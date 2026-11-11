@@ -24,6 +24,9 @@ import { FilterUnionByProperty, groupedNotificationTypes, obsoleteNotificationTy
 import { trackPromise } from '@/misc/promise-tracker.js';
 // import { escapeHtml } from '@/misc/escape-html.js';
 
+// arti: notification types that can land in the requests box
+export const NOTIFICATION_REQUEST_TYPES = ['mention', 'reply', 'quote'] as const;
+
 @Injectable()
 export class NotificationService implements OnApplicationShutdown {
 	#shutdownController = new AbortController();
@@ -147,6 +150,12 @@ export class NotificationService implements OnApplicationShutdown {
 			}
 		}
 
+		// arti: notifications from strangers go to the separate requests box (no push, no unread mark)
+		const asRequest = notifierId != null
+			&& profile.notificationRequestsEnabled
+			&& (NOTIFICATION_REQUEST_TYPES as readonly string[]).includes(type)
+			&& !(await this.isKnownNotifier(notifieeId, notifierId));
+
 		const createdAt = new Date();
 		let notification: FilterUnionByProperty<MiNotification, 'type', T>;
 		let redisId: string;
@@ -164,7 +173,7 @@ export class NotificationService implements OnApplicationShutdown {
 
 			try {
 				redisId = (await this.redisClient.xadd(
-					`notificationTimeline:${notifieeId}`,
+					asRequest ? `notificationRequests:${notifieeId}` : `notificationTimeline:${notifieeId}`,
 					'MAXLEN', '~', this.config.perUserNotificationsMaxCount.toString(),
 					this.toXListId(notification.id),
 					'data', JSON.stringify(notification)))!;
@@ -177,6 +186,8 @@ export class NotificationService implements OnApplicationShutdown {
 			break;
 			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 		} while (true);
+
+		if (asRequest) return notification;
 
 		const packed = await this.notificationEntityService.pack(notification, notifieeId, {});
 
@@ -233,6 +244,31 @@ export class NotificationService implements OnApplicationShutdown {
 		*/
 	}
 
+	// arti: notification requests
+	private async isKnownNotifier(notifieeId: MiUser['id'], notifierId: MiUser['id']): Promise<boolean> {
+		const [isFollowing, isFollower, isAllowed] = await Promise.all([
+			this.cacheService.userFollowingsCache.fetch(notifieeId).then(followings => Object.hasOwn(followings, notifierId)),
+			this.cacheService.userFollowingsCache.fetch(notifierId).then(followings => Object.hasOwn(followings, notifieeId)),
+			this.redisClient.sismember(`notificationRequestAllowed:${notifieeId}`, notifierId).then(x => x === 1),
+		]);
+		return isFollowing || isFollower || isAllowed;
+	}
+
+	/** Let a stranger's notifications through from now on, and drop their waiting requests. */
+	@bindThis
+	public async allowNotificationRequests(userId: MiUser['id'], notifierId: MiUser['id']): Promise<void> {
+		await this.redisClient.sadd(`notificationRequestAllowed:${userId}`, notifierId);
+		const key = `notificationRequests:${userId}`;
+		const entries = await this.redisClient.xrange(key, '-', '+');
+		const ids = entries.filter(([, fields]) => (JSON.parse(fields[1]) as { notifierId?: string }).notifierId === notifierId).map(([id]) => id);
+		if (ids.length > 0) await this.redisClient.xdel(key, ...ids);
+	}
+
+	@bindThis
+	public async clearNotificationRequests(userId: MiUser['id']): Promise<void> {
+		await this.redisClient.del(`notificationRequests:${userId}`);
+	}
+
 	@bindThis
 	public async flushAllNotifications(userId: MiUser['id']) {
 		await Promise.all([
@@ -270,7 +306,10 @@ export class NotificationService implements OnApplicationShutdown {
 			includeTypes?: (MiNotification['type'] | string)[],
 			excludeTypes?: (MiNotification['type'] | string)[],
 		},
+		// arti: 'requests' reads the separate box for notifications from strangers
+		source: 'timeline' | 'requests' = 'timeline',
 	): Promise<MiNotification[]> {
+		const streamKey = source === 'requests' ? `notificationRequests:${userId}` : `notificationTimeline:${userId}`;
 		let sinceTime = sinceId ? this.toXListId(sinceId) : null;
 		let untilTime = untilId ? this.toXListId(untilId) : null;
 
@@ -281,13 +320,13 @@ export class NotificationService implements OnApplicationShutdown {
 			// sinceidのみの場合は古い順、そうでない場合は新しい順。 QueryService.makePaginationQueryも参照
 			if (sinceTime && !untilTime) {
 				notificationsRes = await this.redisClient.xrange(
-					`notificationTimeline:${userId}`,
+					streamKey,
 					'(' + sinceTime,
 					'+',
 					'COUNT', limit);
 			} else {
 				notificationsRes = await this.redisClient.xrevrange(
-					`notificationTimeline:${userId}`,
+					streamKey,
 					untilTime ? '(' + untilTime : '+',
 					sinceTime ? '(' + sinceTime : '-',
 					'COUNT', limit);

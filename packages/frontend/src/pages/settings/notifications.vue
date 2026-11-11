@@ -10,6 +10,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<SearchText>{{ i18n.ts._settings.notificationsBanner }}</SearchText>
 		</MkFeatureBanner>
 
+		<!-- arti: separate box for notifications from strangers -->
+		<MkSwitch :modelValue="notificationRequestsEnabled" @update:modelValue="onChangeNotificationRequests">
+			<template #label>{{ i18n.ts._notificationRequests.enable }}</template>
+			<template #caption>{{ i18n.ts._notificationRequests.enableDescription }}</template>
+		</MkSwitch>
+
 		<FormSection first>
 			<template #label>{{ i18n.ts.notificationRecieveConfig }}</template>
 			<div class="_gaps_s">
@@ -156,6 +162,13 @@ async function updateReceiveConfig(type: typeof notificationTypes[number], value
 	}).then(i => {
 		$i.notificationRecieveConfig = i.notificationRecieveConfig;
 	});
+}
+
+const notificationRequestsEnabled = ref($i.notificationRequestsEnabled);
+
+async function onChangeNotificationRequests(v: boolean) {
+	notificationRequestsEnabled.value = v;
+	await misskeyApi('i/update', { notificationRequestsEnabled: v });
 }
 
 function onChangeSendReadMessage(v: boolean) {

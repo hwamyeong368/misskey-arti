@@ -3586,3 +3586,11 @@ _kyunetTranslation:
   retryTranslation: "Translate again"
   translating: "Translating…"
 snowEffect: "Let it snow"
+_notificationRequests:
+  title: "Strangers"
+  enable: "Keep notifications from strangers separate"
+  enableDescription: "Mentions, replies and quotes from people you neither follow nor are followed by go to the 'Strangers' tab, without push notifications."
+  description: "Mentions, replies and quotes from people you neither follow nor are followed by. Choose 'Accept notifications' to get their notifications normally from now on."
+  allow: "Accept notifications"
+  clear: "Clear all"
+  clearConfirm: "Clear all notifications from strangers?"

@@ -508,6 +508,10 @@ export const packedMeDetailedOnlySchema = {
 			type: 'boolean',
 			nullable: false, optional: false,
 		},
+		notificationRequestsEnabled: {
+			type: 'boolean',
+			nullable: false, optional: false,
+		},
 		followApprovalLocalSeconds: {
 			type: 'number',
 			nullable: true, optional: false,
