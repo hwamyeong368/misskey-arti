@@ -49,6 +49,7 @@ import { NoteDeleteService } from './NoteDeleteService.js';
 import { NotePiningService } from './NotePiningService.js';
 import { NoteUpdateService } from './NoteUpdateService.js';
 import { NoteDraftService } from './NoteDraftService.js';
+import { NoteInteractionPolicyService } from './NoteInteractionPolicyService.js';
 import { NotificationService } from './NotificationService.js';
 import { PollService } from './PollService.js';
 import { PushNotificationService } from './PushNotificationService.js';
@@ -160,6 +161,7 @@ import { WebfingerService } from './WebfingerService.js';
 import { ApImageService } from './activitypub/models/ApImageService.js';
 import { ApMentionService } from './activitypub/models/ApMentionService.js';
 import { ApNoteService } from './activitypub/models/ApNoteService.js';
+import { ApQuoteRequestService } from './activitypub/ApQuoteRequestService.js';
 import { ApPersonService } from './activitypub/models/ApPersonService.js';
 import { ApQuestionService } from './activitypub/models/ApQuestionService.js';
 import { QueueModule } from './QueueModule.js';
@@ -210,6 +212,7 @@ const $NoteDeleteService: Provider = { provide: 'NoteDeleteService', useExisting
 const $NotePiningService: Provider = { provide: 'NotePiningService', useExisting: NotePiningService };
 const $NoteUpdateService: Provider = { provide: 'NoteUpdateService', useExisting: NoteUpdateService };
 const $NoteDraftService: Provider = { provide: 'NoteDraftService', useExisting: NoteDraftService };
+const $NoteInteractionPolicyService: Provider = { provide: 'NoteInteractionPolicyService', useExisting: NoteInteractionPolicyService };
 const $NotificationService: Provider = { provide: 'NotificationService', useExisting: NotificationService };
 const $PollService: Provider = { provide: 'PollService', useExisting: PollService };
 const $SystemAccountService: Provider = { provide: 'SystemAccountService', useExisting: SystemAccountService };
@@ -330,6 +333,7 @@ const $WebfingerService: Provider = { provide: 'WebfingerService', useExisting: 
 const $ApImageService: Provider = { provide: 'ApImageService', useExisting: ApImageService };
 const $ApMentionService: Provider = { provide: 'ApMentionService', useExisting: ApMentionService };
 const $ApNoteService: Provider = { provide: 'ApNoteService', useExisting: ApNoteService };
+const $ApQuoteRequestService: Provider = { provide: 'ApQuoteRequestService', useExisting: ApQuoteRequestService };
 const $ApPersonService: Provider = { provide: 'ApPersonService', useExisting: ApPersonService };
 const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting: ApQuestionService };
 // kyunet: fork-only LLM translation services
@@ -379,6 +383,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		NotePiningService,
 		NoteUpdateService,
 		NoteDraftService,
+		NoteInteractionPolicyService,
 		NotificationService,
 		PollService,
 		SystemAccountService,
@@ -504,6 +509,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		ApImageService,
 		ApMentionService,
 		ApNoteService,
+		ApQuoteRequestService,
 		ApPersonService,
 		ApQuestionService,
 		QueueService,
@@ -545,6 +551,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$NotePiningService,
 		$NoteUpdateService,
 		$NoteDraftService,
+		$NoteInteractionPolicyService,
 		$NotificationService,
 		$PollService,
 		$SystemAccountService,
@@ -669,6 +676,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$ApImageService,
 		$ApMentionService,
 		$ApNoteService,
+		$ApQuoteRequestService,
 		$ApPersonService,
 		$ApQuestionService,
 		$TelemetryService,
@@ -711,6 +719,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		NotePiningService,
 		NoteUpdateService,
 		NoteDraftService,
+		NoteInteractionPolicyService,
 		NotificationService,
 		PollService,
 		SystemAccountService,
@@ -835,6 +844,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		ApImageService,
 		ApMentionService,
 		ApNoteService,
+		ApQuoteRequestService,
 		ApPersonService,
 		ApQuestionService,
 		QueueService,
@@ -876,6 +886,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$NotePiningService,
 		$NoteUpdateService,
 		$NoteDraftService,
+		$NoteInteractionPolicyService,
 		$NotificationService,
 		$PollService,
 		$SystemAccountService,
@@ -998,6 +1009,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$ApImageService,
 		$ApMentionService,
 		$ApNoteService,
+		$ApQuoteRequestService,
 		$ApPersonService,
 		$ApQuestionService,
 		$TelemetryService,

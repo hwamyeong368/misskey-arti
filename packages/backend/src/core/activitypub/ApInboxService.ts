@@ -35,7 +35,7 @@ import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { QueueService } from '@/core/QueueService.js';
-import { MiChatRoomInvitation, MiChatRoomMembership, type UsersRepository, type NotesRepository, type FollowingsRepository, type AbuseUserReportsRepository, type FollowRequestsRepository, type MiChatMessage, type MiChatRoom, type MiMeta, type ChatMessagesRepository, type ChatRoomsRepository, type ChatRoomInvitationsRepository, type ChatRoomMembershipsRepository } from '@/models/_.js';
+import { MiChatRoom, MiChatRoomInvitation, MiChatRoomMembership, type UsersRepository, type NotesRepository, type FollowingsRepository, type AbuseUserReportsRepository, type FollowRequestsRepository, type MiChatMessage, type MiMeta, type ChatMessagesRepository, type ChatRoomsRepository, type ChatRoomInvitationsRepository, type ChatRoomMembershipsRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import type { MiNote } from '@/models/Note.js';
@@ -43,8 +43,9 @@ import type { MiDriveFile } from '@/models/DriveFile.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { AbuseReportService } from '@/core/AbuseReportService.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
+import { ApQuoteRequestService } from './ApQuoteRequestService.js';
 import { parseRemoteChatDate } from './misc/chat-remote-date.js';
-import { getApHrefNullable, getApId, getApIds, getApType, getOneApId, isAccept, isActor, isAdd, isAnnounce, isBlock, isCollection, isCollectionOrOrderedCollection, isCreate, isDelete, isEmoji, isFlag, isFollow, isInvite, isLike, isMove, isPost, isReject, isRemove, isTombstone, isUndo, isUpdate, validActor, validPost } from './type.js';
+import { getApHrefNullable, getApId, getApIds, getApType, getOneApId, isAccept, isActor, isAdd, isAnnounce, isBlock, isCollection, isCollectionOrOrderedCollection, isCreate, isDelete, isEmoji, isFlag, isFollow, isInvite, isLike, isMove, isPost, isQuoteRequest, isReject, isRemove, isTombstone, isUndo, isUpdate, validActor, validPost } from './type.js';
 import { ApNoteService } from './models/ApNoteService.js';
 import { ApLoggerService } from './ApLoggerService.js';
 import { ApDbResolverService } from './ApDbResolverService.js';
@@ -139,6 +140,7 @@ export class ApInboxService {
 		private apMfmService: ApMfmService,
 		private queueService: QueueService,
 		private globalEventService: GlobalEventService,
+		private apQuoteRequestService: ApQuoteRequestService,
 	) {
 		this.logger = this.apLoggerService.logger;
 	}
@@ -208,6 +210,9 @@ export class ApInboxService {
 			return await this.follow(actor, activity);
 		} else if (isAccept(activity)) {
 			return await this.accept(actor, activity, resolver);
+		} else if (isQuoteRequest(activity)) {
+			// arti: FEP-044f
+			return await this.apQuoteRequestService.handle(actor, activity);
 		} else if (isReject(activity)) {
 			return await this.reject(actor, activity, resolver);
 		} else if (isAdd(activity)) {
@@ -401,15 +406,6 @@ export class ApInboxService {
 			return 'skip: room not found';
 		}
 
-		if (activity.published != null) {
-			const pending = await this.chatRoomInvitationsRepository.findOneBy({ roomId: room.id, userId: actor.id });
-			if (pending != null && this.answersEarlierInvitation(activity, pending)) return 'skip: this answers an earlier invitation';
-		}
-
-		// A leave that overtook this Accept, by the clock of the same server. The invitation is used up either way.
-		const lastStated = published != null ? await this.chatRosterService.lastMemberAt(room.id, actor.id) : null;
-		const alreadyLeft = published != null && lastStated != null && published <= lastStated;
-
 		// Only an actor we actually invited may join.
 		// The room URI is rendered on the invitee's server, so its host says nothing about the room.
 		// Consuming the invitation and creating the membership must be atomic:
@@ -418,7 +414,15 @@ export class ApInboxService {
 		// - a failed membership insert rolls the delete back, so the invitation
 		//   is not lost and the actor can retry.
 		const result = await this.db.transaction(async (manager) => {
+			const locked = await manager.findOne(MiChatRoom, { where: { id: room.id }, lock: { mode: 'pessimistic_write' } });
+			if (locked == null) return 'skip: room not found';
+			const pending = await manager.findOneBy(MiChatRoomInvitation, { roomId: room.id, userId: actor.id });
+			if (pending == null) return 'skip: invitation not found';
+			if (activity.published != null && this.answersEarlierInvitation(activity, pending)) return 'skip: this answers an earlier invitation';
+			const lastStated = published != null ? await this.chatRosterService.lastMemberAt(room.id, actor.id, manager) : null;
+			const alreadyLeft = published != null && lastStated != null && published <= lastStated;
 			const consumed = await manager.delete(MiChatRoomInvitation, {
+				id: pending.id,
 				roomId: room.id,
 				userId: actor.id,
 			});
@@ -439,12 +443,13 @@ export class ApInboxService {
 			});
 			if (existingMembership != null) {
 				this.logger.info(`User ${actor.id} is already a member of room ${room.id}`);
+				await this.chatRosterService.recordMemberAccept(room.id, actor.id, published, manager);
 				return 'ok';
 			}
 
 			// Commit the delete: the invitee's server consumed its copy before sending Accept,
 			// so the invitation can never be accepted again and would only block a new one.
-			if (room.isArchived) return ROOM_ARCHIVED;
+			if (locked.isArchived) return ROOM_ARCHIVED;
 
 			const membershipsCount = await manager.countBy(MiChatRoomMembership, { roomId: room.id });
 			if (membershipsCount >= MAX_ROOM_MEMBERS) return ROOM_FULL;
@@ -456,6 +461,7 @@ export class ApInboxService {
 			};
 
 			await manager.insert(MiChatRoomMembership, membership);
+			await this.chatRosterService.recordMemberAccept(room.id, actor.id, published, manager);
 
 			this.logger.info(`Remote user ${actor.id} accepted invitation and joined room ${room.id}`);
 			return 'ok';
@@ -466,9 +472,6 @@ export class ApInboxService {
 			return result;
 		}
 		if (result !== 'ok') return result;
-
-		// A Remove from before this acceptance, still on its way, must not end the membership.
-		if (actor.id !== room.ownerId) await this.chatRosterService.recordMemberAccept(room.id, actor.id, published);
 
 		this.globalEventService.publishChatRoomStream(room.id, 'membershipStarted', { userId: actor.id });
 
@@ -545,10 +548,12 @@ export class ApInboxService {
 			if (room.ownerId !== actor.id) return 'skip: only the room owner can add a member';
 
 			const memberships = await this.chatRoomMembershipsRepository.findBy({ roomId: room.id });
-			if (memberships.length >= MAX_ROOM_MEMBERS) return 'skip: room is full';
-
 			const userId = getApId(activity.object);
-			const user = await this.apDbResolverService.getUserFromApId(userId) ?? await this.apPersonService.resolvePerson(userId, resolver);
+			const known = await this.apDbResolverService.getUserFromApId(userId);
+			// Do not fetch another remote actor when full, but still order an Add
+			// for a member we already know, so an older Remove cannot undo it.
+			if (memberships.length >= MAX_ROOM_MEMBERS && known == null) return 'skip: room is full';
+			const user = known ?? await this.apPersonService.resolvePerson(userId, resolver);
 			if (user == null) return 'skip: user not found';
 			// Only a local invitation acceptance may grant membership to a local user. This brings back one the roster took away before the owner heard of it.
 			const isLocal = this.userEntityService.isLocalUser(user);
@@ -556,16 +561,20 @@ export class ApInboxService {
 			if (user.id === room.ownerId) return 'skip: owner is already a member';
 
 			const published = this.parseRemoteDate(activity.published);
-			if (!await this.chatRosterService.claimAdd(room.id, user.id, published)) return 'skip: a newer change to this member was applied';
-			if (published == null) await this.chatRosterService.recordIfMissing(room.id, user.id);
-
-			const existing = await this.chatRoomMembershipsRepository.findOneBy({ roomId: room.id, userId: user.id });
-			if (existing == null) {
-				await this.chatRoomMembershipsRepository.insertOne({
-					id: this.idService.gen(),
-					roomId: room.id,
-					userId: user.id,
-				});
+			const result = await this.db.transaction(async manager => {
+				const locked = await manager.findOne(MiChatRoom, { where: { id: room.id }, lock: { mode: 'pessimistic_write' } });
+				if (locked == null) return 'skip: room not found';
+				if (isLocal && await this.chatRosterService.acceptedAt(room.id, user.id, manager) == null) return 'skip: local membership is managed locally';
+				const existing = await manager.findOneBy(MiChatRoomMembership, { roomId: room.id, userId: user.id });
+				if (existing == null && await manager.countBy(MiChatRoomMembership, { roomId: room.id }) >= MAX_ROOM_MEMBERS) return 'skip: room is full';
+				if (!await this.chatRosterService.claimAdd(room.id, user.id, published, manager)) return 'skip: a newer change to this member was applied';
+				if (published == null) await this.chatRosterService.recordIfMissing(room.id, user.id, manager);
+				if (existing != null) return 'existing';
+				await manager.insert(MiChatRoomMembership, { id: this.idService.gen(), roomId: room.id, userId: user.id });
+				return 'added';
+			});
+			if (result.startsWith('skip:')) return result;
+			if (result === 'added') {
 				this.globalEventService.publishChatRoomStream(room.id, 'membershipStarted', { userId: user.id });
 				if (isLocal) this.chatService.notifyRoomListChanged([user.id]);
 			}
@@ -738,8 +747,13 @@ export class ApInboxService {
 		const unlock = await acquireApObjectLock(this.redisClient, messageUri);
 		try {
 			const message = await this.chatService.findMessageByUri(messageUri);
-			// Its author's own Delete settles a message that is still on its way here.
-			if (message == null) return 'skip: message not found';
+			if (message == null) {
+				if (!this.isOnActorHost(messageUri, doer)) return 'skip: message is not on the actor\'s server';
+				await this.assertKnownInRoom(room, doer);
+				if (!await this.chatService.isRoomMember(room, doer.id)) return 'skip: not a member of the room';
+				const stored = await this.storeDeferredChatDelete(doer, messageUri, room.id);
+				return stored ? 'ok: chat message tombstone stored' : 'skip: too many deferred chat deletes';
+			}
 			if (message.toRoomId !== room.id) return 'skip: message is from another room';
 			await this.chatService.deleteRemoteMessage(doer, message);
 			return 'ok: chat message deleted';
@@ -1171,6 +1185,8 @@ export class ApInboxService {
 	private async createChatMessage(resolver: Resolver, actor: MiRemoteUser, object: IPost, activity: ICreate | IUpdate | IAnnounce, options?: ActivityAttempt): Promise<string> {
 		if (typeof object !== 'object') return 'skip: object is not an object';
 		if (typeof object.id !== 'string') return 'skip: object has no id';
+		// The message URI column holds at most 512 characters; reject before resolving recipients or files.
+		if (object.id.length > 1024 || Array.from(object.id).length > 512) return 'skip: chat message id is too long';
 		if (object.attributedTo == null || getOneApId(object.attributedTo) !== actor.uri) return 'skip: actor.uri !== object.attributedTo';
 		if (!this.isOnActorHost(object.id, actor)) return 'skip: host in actor.uri !== object.id';
 
@@ -1251,6 +1267,7 @@ export class ApInboxService {
 				if (isGroup) {
 					const room = await this.chatRoomForMessage(contextUri, recipients, actor);
 					if (typeof room === 'string') return room;
+					if (await this.hasDeferredRoomChatDelete(actor, object.id, room.id)) return 'skip: deleted';
 					await this.chatService.assertRemoteWriteAllowed(room);
 				} else {
 					await this.chatService.assertCanSendToUser(actor, recipients[0]);
@@ -1312,6 +1329,7 @@ export class ApInboxService {
 				// Group chat
 				const room = await this.chatRoomForMessage(contextUri!, recipients, actor);
 				if (typeof room === 'string') return room;
+				if (await this.hasDeferredRoomChatDelete(actor, uri, room.id)) return 'skip: deleted';
 
 				// Create the message to the room
 				await this.chatService.createMessageToRoom(actor, room, {
@@ -1675,18 +1693,27 @@ export class ApInboxService {
 
 			const owner = await this.usersRepository.findOneBy({ id: room.ownerId });
 			const published = this.parseRemoteDate(activity.published);
-			if (owner?.host == null) {
-				// Everyone but the owner removes only themselves from a room owned here. Someone neither in it nor invited has nothing to place in order.
-				const known = await this.chatService.isRoomMember(room, member.id) || await this.chatRoomInvitationsRepository.findOneBy({ roomId: room.id, userId: member.id }) != null;
-				if (!known) return 'ok: removed from chat room';
-				if (!await this.chatRosterService.claimOwnRemove(room.id, member.id, published)) return 'skip: a newer change to this member was applied';
-			} else if (room.ownerId === actor.id) {
-				if (!await this.chatRosterService.claimRemove(room.id, member.id, published)) return 'skip: a newer change to this member was applied';
-				if (this.userEntityService.isLocalUser(member)) await this.chatRosterService.forgetAccepted(room.id, member.id);
-			}
-			// A member leaving another server's room goes by arrival: their clock cannot be placed among the owner's. The owner passes it on with a time of its own.
-
-			const removed = await this.chatService.removeRoomMember(room, member);
+			const result = await this.db.transaction(async manager => {
+				const locked = await manager.findOne(MiChatRoom, { where: { id: room.id }, lock: { mode: 'pessimistic_write' } });
+				if (locked == null) return 'room not found';
+				if (owner?.host == null) {
+					// Someone neither in the room nor invited has nothing to place in order.
+					const known = await manager.findOneBy(MiChatRoomMembership, { roomId: room.id, userId: member.id }) != null ||
+						await manager.findOneBy(MiChatRoomInvitation, { roomId: room.id, userId: member.id }) != null;
+					if (!known) return 'absent';
+					if (!await this.chatRosterService.claimOwnRemove(room.id, member.id, published, manager)) return 'stale';
+				} else if (room.ownerId === actor.id) {
+					if (!await this.chatRosterService.claimRemove(room.id, member.id, published, manager)) return 'stale';
+					if (this.userEntityService.isLocalUser(member)) await this.chatRosterService.forgetAccepted(room.id, member.id, manager);
+				}
+				// A member leaving another server's room goes by arrival, because their clock cannot be compared with the owner's.
+				const deleted = await manager.delete(MiChatRoomMembership, { roomId: room.id, userId: member.id });
+				return (deleted.affected ?? 0) > 0 ? 'removed' : 'absent';
+			});
+			if (result === 'room not found') return result;
+			if (result === 'stale') return 'skip: a newer change to this member was applied';
+			const removed = result === 'removed';
+			if (removed) await this.chatService.finishRoomMemberRemoval(room, member);
 
 			this.logger.info(`[ApInboxService.remove] Removed: ${removed}, room: ${room.id}, user: ${member.id}`);
 
@@ -1818,36 +1845,32 @@ export class ApInboxService {
 		if (!room || room.ownerId !== actor.id) return 'skip: only the room owner can cancel an invitation';
 		const roomId = room.id;
 
-		// A cancellation of an earlier invitation, still on its way, says nothing about the one that came after it.
-		const last = await this.chatRosterService.lastRosterAt(roomId, invitee.id);
-		if (published != null && last != null && published < last) return 'skip: a newer change to this member was applied';
-
-		// Find and delete the invitation
-		const invitation = await this.chatRoomInvitationsRepository.findOneBy({
-			roomId: roomId,
-			userId: invitee.id,
+		const result = await this.db.transaction(async manager => {
+			const locked = await manager.findOne(MiChatRoom, { where: { id: roomId }, lock: { mode: 'pessimistic_write' } });
+			if (locked == null) return 'missing';
+			const last = await this.chatRosterService.lastRosterAt(roomId, invitee.id, manager);
+			if (published != null && last != null && published < last) return 'stale';
+			const invitation = await manager.findOneBy(MiChatRoomInvitation, { roomId, userId: invitee.id });
+			if (invitation != null) {
+				await manager.delete(MiChatRoomInvitation, { id: invitation.id });
+				if (published != null) await this.chatRosterService.advance(roomId, invitee.id, published, manager);
+				return 'cancelled';
+			}
+			// An untimed cancellation cannot be ordered against an invitation already accepted here.
+			if (published == null || (last != null && published <= last)) return 'absent';
+			await this.chatRosterService.advance(roomId, invitee.id, published, manager);
+			await this.chatRosterService.forgetAccepted(roomId, invitee.id, manager);
+			const deleted = await manager.delete(MiChatRoomMembership, { roomId, userId: invitee.id });
+			return (deleted.affected ?? 0) > 0 ? 'removed' : 'absent';
 		});
-
-		if (invitation) {
-			await this.chatRoomInvitationsRepository.delete(invitation.id);
-			if (published != null) await this.chatRosterService.advance(roomId, invitee.id, published);
+		if (result === 'stale') return 'skip: a newer change to this member was applied';
+		if (result === 'cancelled') {
 			this.chatService.notifyRoomListChanged([invitee.id]);
-
 			this.logger.info(`Cancelled invitation: room=${roomId}, user=${invitee.id}`);
 			return 'ok: invitation cancelled';
 		}
-
-		// Without a time, this cannot be told from a late one that came before the invitation since accepted.
-		if (published == null || (last != null && published <= last)) {
-			this.logger.warn(`Invitation not found: room=${roomId}, user=${invitee.id}`);
-			return 'skip: invitation not found';
-		}
-
-		await this.chatRosterService.advance(roomId, invitee.id, published);
-
-		// It crossed the acceptance: the invitation was already gone there, so the owner will never count this member.
-		await this.chatRosterService.forgetAccepted(roomId, invitee.id);
-		if (await this.chatService.removeRoomMember(room, invitee)) {
+		if (result === 'removed') {
+			await this.chatService.finishRoomMemberRemoval(room, invitee);
 			this.logger.info(`Took back a membership whose invitation was cancelled: room=${roomId}, user=${invitee.id}`);
 			return 'ok: membership taken back';
 		}
@@ -2145,14 +2168,19 @@ export class ApInboxService {
 		}
 	}
 
-	private async storeDeferredChatDelete(actor: MiRemoteUser, uri: string): Promise<boolean> {
-		const indexKey = `chat_delete_upon_arrival_index:${actor.id}`;
+	private async hasDeferredRoomChatDelete(actor: MiRemoteUser, uri: string, roomId: string): Promise<boolean> {
+		return await this.redisClient.get(`chat_delete_upon_arrival:${uri}:${encodeURIComponent(actor.uri)}:room:${roomId}`) === actor.uri;
+	}
+
+	private async storeDeferredChatDelete(actor: MiRemoteUser, uri: string, roomId?: string): Promise<boolean> {
+		// Relays share one bounded budget across rooms, separate from the author's own deletes.
+		const indexKey = `chat_delete_upon_arrival_index:${actor.id}:${roomId == null ? 'direct' : 'relay'}`;
 		const count = await this.redisClient.scard(indexKey);
 		if (count >= MAX_DEFERRED_CHAT_DELETES_PER_ACTOR) return false;
-		await this.redisClient.sadd(indexKey, uri);
+		await this.redisClient.sadd(indexKey, roomId == null ? uri : `${uri}:room:${roomId}`);
 		// NX keeps this a fixed window: extended on every call, the set of an actor that stays active never empties until it reaches the cap.
 		await this.redisClient.expire(indexKey, DEFERRED_CHAT_DELETE_TTL, 'NX');
-		await this.redisClient.setex(`chat_delete_upon_arrival:${uri}:${encodeURIComponent(actor.uri)}`, DEFERRED_CHAT_DELETE_TTL, actor.uri);
+		await this.redisClient.setex(`chat_delete_upon_arrival:${uri}:${encodeURIComponent(actor.uri)}${roomId == null ? '' : `:room:${roomId}`}`, DEFERRED_CHAT_DELETE_TTL, actor.uri);
 		return true;
 	}
 
@@ -2333,34 +2361,32 @@ export class ApInboxService {
 
 		// Older than a change already applied: its cancellation overtook it, and it would only offer a room the owner will not let this user into.
 		const published = this.parseRemoteDate(activity.published);
-		if (published != null) {
-			const last = await this.chatRosterService.lastRosterAt(room.id, invitee.id);
-			if (last != null && published < last) return 'skip: a newer change to this member was applied';
-			await this.chatRosterService.advance(room.id, invitee.id, published);
-		}
-
-		// Check if invitation already exists
-		const existingInvitation = await this.chatRoomInvitationsRepository.findOneBy({
-			roomId: room.id,
-			userId: invitee.id,
-		});
-		if (existingInvitation) {
-			// The owner cancelled and invited again, and this overtook the cancellation. What gets answered from now on is this one.
-			if (published != null && (existingInvitation.invitePublishedAt == null || existingInvitation.invitePublishedAt < published)) {
-				await this.chatRoomInvitationsRepository.update(existingInvitation.id, { invitePublishedAt: published });
-			}
-			return 'skip: invitation already exists';
-		}
-
-		// Create the invitation directly
 		const invitation = {
 			id: this.idService.gen(),
 			roomId: room.id,
 			userId: invitee.id,
 			invitePublishedAt: published,
 		};
-
-		await this.chatRoomInvitationsRepository.insertOne(invitation);
+		const roomId = room.id;
+		const result = await this.db.transaction(async manager => {
+			const locked = await manager.findOne(MiChatRoom, { where: { id: roomId }, lock: { mode: 'pessimistic_write' } });
+			if (locked == null) return 'skip: room not found';
+			if (published != null) {
+				const last = await this.chatRosterService.lastRosterAt(roomId, invitee.id, manager);
+				if (last != null && published < last) return 'skip: a newer change to this member was applied';
+				await this.chatRosterService.advance(roomId, invitee.id, published, manager);
+			}
+			const existing = await manager.findOneBy(MiChatRoomInvitation, { roomId, userId: invitee.id });
+			if (existing != null) {
+				if (published != null && (existing.invitePublishedAt == null || existing.invitePublishedAt < published)) {
+					await manager.update(MiChatRoomInvitation, { id: existing.id }, { invitePublishedAt: published });
+				}
+				return 'skip: invitation already exists';
+			}
+			await manager.insert(MiChatRoomInvitation, invitation);
+			return 'ok';
+		});
+		if (result !== 'ok') return result;
 
 		// Send local notification
 		this.notificationService.createNotification(invitee.id, 'chatRoomInvitationReceived', {

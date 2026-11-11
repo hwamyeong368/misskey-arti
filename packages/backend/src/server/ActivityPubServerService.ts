@@ -17,6 +17,7 @@ import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReact
 import * as url from '@/misc/prelude/url.js';
 import type { Config } from '@/config.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
+import { ApQuoteRequestService } from '@/core/activitypub/ApQuoteRequestService.js';
 import { chatActorUri, chatMessageUri, chatRoomUriForOwner } from '@/core/activitypub/misc/chat-payloads.js';
 import { ChatRosterService } from '@/core/ChatRosterService.js';
 import { QueueService } from '@/core/QueueService.js';
@@ -119,6 +120,7 @@ export class ActivityPubServerService {
 		private fanoutTimelineEndpointService: FanoutTimelineEndpointService,
 		private apDbResolverService: ApDbResolverService,
 		private chatRosterService: ChatRosterService,
+		private apQuoteRequestService: ApQuoteRequestService,
 	) {
 		//this.createServer = this.createServer.bind(this);
 	}
@@ -795,6 +797,22 @@ export class ActivityPubServerService {
 			reply.header('Cache-Control', 'public, max-age=180');
 			this.setResponseType(request, reply);
 			return this.apRendererService.addContext(await this.apRendererService.renderNote(note, false));
+		});
+
+		// arti: FEP-044f quote authorization
+		fastify.get<{ Params: { id: string; } }>('/quote_authorizations/:id', async (request, reply) => {
+			if (this.meta.federation === 'none') {
+				reply.code(403);
+				return;
+			}
+			const authorization = await this.apQuoteRequestService.renderAuthorization(request.params.id);
+			if (authorization == null) {
+				reply.code(404);
+				return;
+			}
+			reply.header('Cache-Control', 'public, max-age=180');
+			this.setResponseType(request, reply);
+			return authorization;
 		});
 
 		// note activity

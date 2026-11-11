@@ -162,6 +162,16 @@ export const packedNoteDraftSchema = {
 			optional: false, nullable: true,
 			enum: ['likeOnly', 'likeOnlyForRemote', 'nonSensitiveOnly', 'nonSensitiveOnlyForLocalLikeOnlyForRemote', null],
 		},
+		replyPolicy: {
+			type: 'string',
+			optional: false, nullable: true,
+			enum: ['followers', 'following', 'mentioned', 'nobody', null],
+		},
+		quotePolicy: {
+			type: 'string',
+			optional: false, nullable: true,
+			enum: ['followers', 'nobody', null],
+		},
 		scheduledAt: {
 			type: 'number',
 			optional: false, nullable: true,

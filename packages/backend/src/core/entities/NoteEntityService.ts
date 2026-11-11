@@ -13,6 +13,7 @@ import type { MiUser } from '@/models/User.js';
 import type { MiNote } from '@/models/Note.js';
 import type { UsersRepository, NotesRepository, FollowingsRepository, PollsRepository, PollVotesRepository, NoteReactionsRepository, ChannelsRepository, NoteRevisionsRepository, MiMeta } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
+import { NoteInteractionPolicyService } from '@/core/NoteInteractionPolicyService.js';
 import { DebounceLoader } from '@/misc/loader.js';
 import { IdService } from '@/core/IdService.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
@@ -71,6 +72,7 @@ export class NoteEntityService implements OnModuleInit {
 	private reactionService: ReactionService;
 	private reactionsBufferingService: ReactionsBufferingService;
 	private idService: IdService;
+	private interactionPolicy: NoteInteractionPolicyService;
 	private cacheService: CacheService;
 	private noteLoader = new DebounceLoader(this.findNoteOrFail);
 
@@ -112,6 +114,7 @@ export class NoteEntityService implements OnModuleInit {
 		//private idService: IdService,
 		//private cacheService: CacheService,
 	) {
+		this.interactionPolicy = new NoteInteractionPolicyService(this.followingsRepository);
 	}
 
 	onModuleInit() {
@@ -464,6 +467,11 @@ export class NoteEntityService implements OnModuleInit {
 			visibility: note.visibility,
 			localOnly: note.localOnly,
 			reactionAcceptance: note.reactionAcceptance,
+			replyPolicy: note.replyPolicy ?? null,
+			quotePolicy: note.quotePolicy ?? null,
+			// arti: only computed when the note has a policy
+			canReply: note.replyPolicy != null ? (meId != null && this.interactionPolicy.isAllowed(note, 'reply', meId)) : undefined,
+			canQuote: note.quotePolicy != null ? (meId != null && this.interactionPolicy.isAllowed(note, 'quote', meId)) : undefined,
 			visibleUserIds: note.visibility === 'specified' ? note.visibleUserIds : undefined,
 			renoteCount: note.renoteCount,
 			repliesCount: note.repliesCount,

@@ -1649,7 +1649,7 @@ export type paths = {
          * chat/rooms/members
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *write:chat*
+         *     **Credential required**: *Yes* / **Permission**: *read:chat*
          */
         post: operations['chat___rooms___members'];
     };
@@ -1854,7 +1854,7 @@ export type paths = {
     '/drive/files': {
         /**
          * drive/files
-         * @description No description provided.
+         * @description For name or size sorting, pass the last file’s name as untilName or size as untilSize with untilId to continue even if the file is moved or deleted.
          *
          *     **Credential required**: *Yes* / **Permission**: *read:drive*
          */
@@ -1865,7 +1865,7 @@ export type paths = {
          * drive/files/attached-chat-messages
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *read:drive*
+         *     **Credential required**: *Yes* / **Permission**: *read:chat*
          */
         post: operations['drive___files___attached-chat-messages'];
     };
@@ -1962,7 +1962,7 @@ export type paths = {
     '/drive/folders': {
         /**
          * drive/folders
-         * @description No description provided.
+         * @description For name sorting, pass the last folder’s name as untilName with untilId to continue even if the folder is moved or deleted.
          *
          *     **Credential required**: *Yes* / **Permission**: *read:drive*
          */
@@ -4745,6 +4745,12 @@ export type components = {
             localOnly?: boolean;
             /** @enum {string|null} */
             reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
+            /** @enum {string|null} */
+            replyPolicy?: 'followers' | 'following' | 'mentioned' | 'nobody' | null;
+            /** @enum {string|null} */
+            quotePolicy?: 'followers' | 'nobody' | null;
+            canReply?: boolean;
+            canQuote?: boolean;
             reactionEmojis: {
                 [key: string]: string;
             };
@@ -4810,6 +4816,10 @@ export type components = {
             localOnly: boolean;
             /** @enum {string|null} */
             reactionAcceptance: 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote' | null;
+            /** @enum {string|null} */
+            replyPolicy: 'followers' | 'following' | 'mentioned' | 'nobody' | null;
+            /** @enum {string|null} */
+            quotePolicy: 'followers' | 'nobody' | null;
             scheduledAt: number | null;
             isActuallyScheduled: boolean;
         };
@@ -21021,6 +21031,8 @@ export interface operations {
                     sinceId?: string;
                     /** Format: misskey:id */
                     untilId?: string;
+                    untilName?: string;
+                    untilSize?: number;
                     sinceDate?: number;
                     untilDate?: number;
                     /**
@@ -21890,6 +21902,9 @@ export interface operations {
                     sinceId?: string;
                     /** Format: misskey:id */
                     untilId?: string;
+                    untilName?: string;
+                    /** @enum {string|null} */
+                    sort?: '+createdAt' | '-createdAt' | '+name' | '-name' | null;
                     sinceDate?: number;
                     untilDate?: number;
                     /**
@@ -31721,6 +31736,16 @@ export interface operations {
                      * @enum {string|null}
                      */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    replyPolicy?: null | 'followers' | 'following' | 'mentioned' | 'nobody';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    quotePolicy?: null | 'followers' | 'nobody';
                     /** @default false */
                     noExtractMentions?: boolean;
                     /** @default false */
@@ -31962,6 +31987,16 @@ export interface operations {
                      * @enum {string|null}
                      */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    replyPolicy?: null | 'followers' | 'following' | 'mentioned' | 'nobody';
+                    /**
+                     * @default null
+                     * @enum {string|null}
+                     */
+                    quotePolicy?: null | 'followers' | 'nobody';
                     /** Format: misskey:id */
                     replyId?: string | null;
                     /** Format: misskey:id */
@@ -32200,6 +32235,10 @@ export interface operations {
                     localOnly?: boolean;
                     /** @enum {string|null} */
                     reactionAcceptance?: null | 'likeOnly' | 'likeOnlyForRemote' | 'nonSensitiveOnly' | 'nonSensitiveOnlyForLocalLikeOnlyForRemote';
+                    /** @enum {string|null} */
+                    replyPolicy?: null | 'followers' | 'following' | 'mentioned' | 'nobody';
+                    /** @enum {string|null} */
+                    quotePolicy?: null | 'followers' | 'nobody';
                     /** Format: misskey:id */
                     replyId?: string | null;
                     /** Format: misskey:id */
