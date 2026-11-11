@@ -66,6 +66,7 @@ export type Channels = {
 			receiveFollowRequest: (payload: User) => void;
 			announcementCreated: (payload: AnnouncementCreated) => void;
 			chatRoomVoiceState: (payload: ChatRoomVoiceState) => void;
+			chatRoomListChanged: () => void;
 		};
 		receives: null;
 	};
@@ -260,6 +261,12 @@ export type Channels = {
 		};
 		events: {
 			message: (payload: ChatMessageLite) => void;
+			updated: (payload: {
+				messageId: ChatMessageLite['id'];
+				text: string;
+				editedAt: string;
+				emojis?: Record<string, string>;
+			}) => void;
 			deleted: (payload: ChatMessageLite['id']) => void;
 			react: (payload: {
 				reaction: string;
@@ -284,6 +291,12 @@ export type Channels = {
 		};
 		events: {
 			message: (payload: ChatMessageLite) => void;
+			updated: (payload: {
+				messageId: ChatMessageLite['id'];
+				text: string;
+				editedAt: string;
+				emojis?: Record<string, string>;
+			}) => void;
 			deleted: (payload: ChatMessageLite['id']) => void;
 			react: (payload: {
 				reaction: string;
@@ -295,6 +308,15 @@ export type Channels = {
 				user?: UserLite;
 				messageId: ChatMessageLite['id'];
 			}) => void;
+			roomUpdated: (payload: {
+				roomId: string;
+				name: string;
+				description: string;
+				isArchived: boolean;
+			}) => void;
+			membershipStarted: (payload: { userId: string; }) => void;
+			membershipEnded: (payload: { userId: string; }) => void;
+			roomDeleted: () => void;
 		};
 		receives: {
 			read: {

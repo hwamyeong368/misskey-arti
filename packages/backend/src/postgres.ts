@@ -86,6 +86,7 @@ import { MiUserMemo } from '@/models/UserMemo.js';
 import { MiChatMessage } from '@/models/ChatMessage.js';
 import { MiChatRoom } from '@/models/ChatRoom.js';
 import { MiChatRoomMembership } from '@/models/ChatRoomMembership.js';
+import { MiChatRoomRosterState } from '@/models/ChatRoomRosterState.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
 import { MiBubbleGameRecord } from '@/models/BubbleGameRecord.js';
 import { MiReversiGame } from '@/models/ReversiGame.js';
@@ -258,6 +259,7 @@ export const entities = [
 	MiChatMessage,
 	MiChatRoom,
 	MiChatRoomMembership,
+	MiChatRoomRosterState,
 	MiChatRoomInvitation,
 	MiChatApproval,
 	MiBubbleGameRecord,

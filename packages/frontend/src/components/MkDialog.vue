@@ -26,7 +26,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<template v-if="input.type === 'password'" #prefix><i class="ti ti-lock"></i></template>
 			<template #caption>
 				<span v-if="okButtonDisabledReason === 'charactersExceeded'" v-text="i18n.tsx._dialog.charactersExceeded({ current: (inputValue as string)?.length ?? 0, max: input.maxLength ?? 'NaN' })"></span>
-				<span v-else-if="okButtonDisabledReason === 'charactersBelow'" v-text="i18n.tsx._dialog.charactersBelow({ current: (inputValue as string)?.length ?? 0, min: input.minLength ?? 'NaN' })"></span>
+				<span v-else-if="okButtonDisabledReason === 'charactersBelow' && (inputTouched || !input.hideMinLengthUntilInput)" v-text="i18n.tsx._dialog.charactersBelow({ current: (inputValue as string)?.length ?? 0, min: input.minLength ?? 'NaN' })"></span>
 			</template>
 		</MkInput>
 		<MkSelect v-if="select" v-model="selectedValue" :items="selectDef" autofocus></MkSelect>
@@ -47,7 +47,7 @@ export type MkDialogReturnType<T = Result> = { canceled: true, result: undefined
 </script>
 
 <script lang="ts" setup>
-import { ref, useTemplateRef, computed } from 'vue';
+import { ref, useTemplateRef, computed, watch } from 'vue';
 import MkModal from '@/components/MkModal.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkInput from '@/components/MkInput.vue';
@@ -64,6 +64,8 @@ type Input = {
 	default: string | number | null;
 	minLength?: number;
 	maxLength?: number;
+	// 最小文字数の案内を、入力を始めるまで出さない
+	hideMinLengthUntilInput?: boolean;
 };
 
 type Select = {
@@ -104,6 +106,11 @@ const emit = defineEmits<{
 const modal = useTemplateRef('modal');
 
 const inputValue = ref<string | number | null>(props.input?.default ?? null);
+// hideMinLengthUntilInput の窓では、まだ何も入力していないうちは足りないと知らせない。確定ボタンは無効のままなので、誤って確定されることはない
+const inputTouched = ref(false);
+watch(inputValue, () => {
+	inputTouched.value = true;
+});
 
 const okButtonDisabledReason = computed<null | 'charactersExceeded' | 'charactersBelow'>(() => {
 	if (props.input) {

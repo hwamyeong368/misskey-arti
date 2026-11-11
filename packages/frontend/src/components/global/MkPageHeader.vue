@@ -54,6 +54,12 @@ export type PageHeaderProps = {
 	hideTitle?: boolean;
 	canOmitTitle?: boolean;
 	displayMyAvatar?: boolean;
+	disableFollowButton?: boolean;
+	notification?: boolean;
+	title?: string;
+	icon?: string;
+	/** 戻るとアプリの外へ出てしまうときの、戻るボタンの移動先 */
+	backFallback?: string;
 };
 </script>
 
@@ -66,6 +72,18 @@ import { deviceKind } from '@/utility/device-kind.js';
 import { $i } from '@/i.js';
 import { DI } from '@/di.js';
 import * as os from '@/os.js';
+import { mainRouter } from '@/router.js';
+import { i18n } from '@/i18n.js';
+import { prefer } from '@/preferences.js';
+import { isFriendly } from '@/utility/is-friendly.js';
+import { scrollToVisibility } from '@/utility/scroll-to-visibility.js';
+import MkFollowButton from '@/components/MkFollowButton.vue';
+import { haptic } from '@/utility/haptic.js';
+import { canGoBackInApp } from '@/utility/app-history.js';
+
+const { showEl } = scrollToVisibility();
+
+const canBack = ref(['index', 'explore', 'my-notifications', 'chat'].includes(<string>mainRouter.currentRoute.value.name));
 
 const props = withDefaults(defineProps<PageHeaderProps>(), {
 	tabs: () => ([] as Tab[]),
@@ -110,6 +128,17 @@ async function openAccountMenu(ev: PointerEvent) {
 
 function onTabClick(): void {
 	top();
+}
+
+function goBack() {
+	haptic();
+
+	if (props.backFallback != null && !canGoBackInApp()) {
+		mainRouter.pushByPath(props.backFallback);
+		return;
+	}
+
+	window.history.back();
 }
 
 let ro: ResizeObserver | null;

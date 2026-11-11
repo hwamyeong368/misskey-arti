@@ -8,13 +8,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div v-if="invitations.length > 0" class="_gaps_s">
 		<MkFolder v-for="invitation in invitations" :key="invitation.id" :defaultOpen="true">
 			<template #icon><i class="ti ti-users-group"></i></template>
-			<template #label>{{ invitation.room.name }}</template>
+			<template #label><Mfm :text="invitation.room.name" :plain="true" :author="invitation.room.owner"/></template>
 			<template #suffix><MkTime :time="invitation.createdAt"/></template>
 			<template #footer>
 				<div class="_buttons">
-					<MkButton primary @click="join(invitation)"><i class="ti ti-plus"></i> {{ i18n.ts._chat.join }}</MkButton>
+					<MkButton v-if="!invitation.room.isArchived" primary @click="join(invitation)"><i class="ti ti-plus"></i> {{ i18n.ts._chat.join }}</MkButton>
 					<MkButton danger @click="reject(invitation)"><i class="ti ti-ban"></i> {{ i18n.ts._chat.reject }}</MkButton>
-					<MkButton @click="ignore(invitation)"><i class="ti ti-x"></i> {{ i18n.ts._chat.ignore }}</MkButton>
 				</div>
 			</template>
 
@@ -23,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div style="flex: 1;" class="_gaps_s">
 					<MkUserName :user="invitation.room.owner"/>
 					<hr>
-					<div>{{ invitation.room.description === '' ? i18n.ts.noDescription : invitation.room.description }}</div>
+					<div><Mfm v-if="invitation.room.description" :text="invitation.room.description" :author="invitation.room.owner"/><template v-else>{{ i18n.ts.noDescription }}</template></div>
 				</div>
 			</div>
 		</MkFolder>
@@ -34,33 +33,32 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { useRouter } from '@/router.js';
 import MkFolder from '@/components/MkFolder.vue';
+import * as os from '@/os.js';
+import { useChatRoomList } from '@/composables/use-chat-room-list.js';
+import { globalEvents } from '@/events.js';
+import { chatJoinErrors, chatRejectErrors } from './chat-errors.js';
 
 const router = useRouter();
 
-const fetching = ref(true);
-const invitations = ref<Misskey.entities.ChatRoomInvitation[]>([]);
-
-async function fetchInvitations() {
-	fetching.value = true;
-
-	const res = await misskeyApi('chat/rooms/invitations/inbox');
-
-	invitations.value = res;
-
-	fetching.value = false;
-}
+const { items: invitations, fetching } = useChatRoomList<Misskey.entities.ChatRoomInvitation>(() => misskeyApi('chat/rooms/invitations/inbox'));
 
 async function join(invitation: Misskey.entities.ChatRoomInvitation) {
-	await misskeyApi('chat/rooms/join', {
-		roomId: invitation.room.id,
-	});
+	try {
+		await os.apiWithDialog('chat/rooms/join', {
+			roomId: invitation.room.id,
+		}, undefined, chatJoinErrors);
+	} catch (err) {
+		// apiWithDialog がエラーを表示済み
+		forgetIfGone(invitation, err);
+		return;
+	}
+	globalEvents.emit('chatRoomInvitationHandled', invitation.room.id, 'joined');
 
 	router.push('/chat/room/:roomId', {
 		params: {
@@ -69,26 +67,27 @@ async function join(invitation: Misskey.entities.ChatRoomInvitation) {
 	});
 }
 
-// arti: decline (the inviter is told), unlike ignore (from CherryPick)
 async function reject(invitation: Misskey.entities.ChatRoomInvitation) {
-	await misskeyApi('chat/rooms/invitations/reject', {
-		roomId: invitation.room.id,
-	});
+	try {
+		await os.apiWithDialog('chat/rooms/invitations/reject', {
+			roomId: invitation.room.id,
+		}, undefined, chatRejectErrors);
+	} catch (err) {
+		// apiWithDialog がエラーを表示済み
+		forgetIfGone(invitation, err);
+		return;
+	}
+	globalEvents.emit('chatRoomInvitationHandled', invitation.room.id, 'rejected');
 
 	invitations.value = invitations.value.filter(i => i.id !== invitation.id);
 }
 
-async function ignore(invitation: Misskey.entities.ChatRoomInvitation) {
-	await misskeyApi('chat/rooms/invitations/ignore', {
-		roomId: invitation.room.id,
-	});
-
+// 招待がもう無ければ、何度押しても同じく失敗するので一覧から下げる。ほかの失敗なら、もう一度押せるように残す
+function forgetIfGone(invitation: Misskey.entities.ChatRoomInvitation, err: unknown) {
+	if ((err as Misskey.api.APIError | null | undefined)?.code !== 'NO_SUCH_ROOM') return;
+	globalEvents.emit('chatRoomInvitationHandled', invitation.room.id, 'gone');
 	invitations.value = invitations.value.filter(i => i.id !== invitation.id);
 }
-
-onMounted(() => {
-	fetchInvitations();
-});
 </script>
 
 <style lang="scss" module>

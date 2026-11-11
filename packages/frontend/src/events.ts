@@ -18,6 +18,19 @@ type Events = {
 	driveFilesDeleted: (files: Misskey.entities.DriveFile[]) => void;
 	driveFoldersUpdated: (folders: Misskey.entities.DriveFolder[]) => void;
 	driveFoldersDeleted: (folders: Misskey.entities.DriveFolder[]) => void;
+
+	// CherryPick
+	showEl: (value: boolean) => void;
+	showEl2: (value: boolean) => void;
+	queueUpdated: (q: number) => void;
+	createChat: (ev: MouseEvent) => void;
+	chatRoomInvitationHandled: (roomId: string, result: 'joined' | 'rejected' | 'gone') => void;
+	showNoteContent: (value: boolean) => void;
+	isAtBottom: (value: boolean) => void;
+	hasRequireRefresh: (value: boolean) => void;
+	reloadTimeline: () => void;
+	reloadNotification: () => void;
+	themeChanging: () => void;
 };
 
 export const globalEvents = new EventEmitter<Events>();

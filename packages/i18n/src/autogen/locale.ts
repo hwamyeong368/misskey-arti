@@ -885,6 +885,18 @@ export interface Locale extends ILocale {
      */
     "selectUser": string;
     /**
+     * 選択中: {n}人
+     */
+    "selectedUsersCount": ParameterizedString<"n">;
+    /**
+     * 複数選択できます。検索し直しても選んだ人は残ります。
+     */
+    "canSelectMultipleUsers": string;
+    /**
+     * {x}さんを選択から外す
+     */
+    "removeFromSelection": ParameterizedString<"x">;
+    /**
      * 宛先
      */
     "recipient": string;
@@ -4137,6 +4149,10 @@ export interface Locale extends ILocale {
      */
     "cannotUploadBecauseUnallowedFileType": string;
     /**
+     * サーバーに接続できないためアップロードできません。ネットワークの状態を確認してから、もう一度お試しください。
+     */
+    "cannotUploadBecauseNetworkError": string;
+    /**
      * ベータ
      */
     "beta": string;
@@ -6068,9 +6084,21 @@ export interface Locale extends ILocale {
          */
         "messages": string;
         /**
+         * メッセージに添付できるファイルは{max}個までです
+         */
+        "tooManyFiles": ParameterizedString<"max">;
+        /**
          * まだメッセージはありません
          */
         "noMessagesYet": string;
+        /**
+         * グループを開く
+         */
+        "openRoom": string;
+        /**
+         * まだメッセージはありません
+         */
+        "noMessagesInRoom": string;
         /**
          * 新しいメッセージ
          */
@@ -6141,21 +6169,9 @@ export interface Locale extends ILocale {
          */
         "join": string;
         /**
-         * 無視
-         */
-        "ignore": string;
-        /**
          * 拒否
          */
         "reject": string;
-        /**
-         * 招待を取り消す
-         */
-        "cancelInvitation": string;
-        /**
-         * {name}さんへの招待を取り消しますか？
-         */
-        "cancelInvitationConfirm": ParameterizedString<"name">;
         /**
          * グループから退出
          */
@@ -6164,6 +6180,10 @@ export interface Locale extends ILocale {
          * メンバー
          */
         "members": string;
+        /**
+         * グループオーナー
+         */
+        "roomOwner": string;
         /**
          * メッセージを検索
          */
@@ -6197,7 +6217,19 @@ export interface Locale extends ILocale {
          */
         "chatIsReadOnlyForThisAccountOrServer": string;
         /**
-         * 相手のアカウントでダイレクトメッセージが使えない状態になっています。
+         * このグループはアーカイブされているため、新たに書き込むことはできません。
+         */
+        "thisRoomIsArchived": string;
+        /**
+         * {name}をアーカイブしますか？
+         */
+        "archiveRoomConfirmTitle": ParameterizedString<"name">;
+        /**
+         * アーカイブすると、メンバー全員がメッセージの送信・編集・削除やリアクションをできなくなり、通話も終了します。これまでのメッセージは読むことができ、後からアーカイブを解除できます。
+         */
+        "archiveRoomConfirmDescription": string;
+        /**
+         * 相手のアカウントでダイレクトメッセージが使えない状態になっています。ダイレクトメッセージを送るとユーザー指定ノートで送信され、相手がユーザー指定ノートに返信すればここで見ることができます。
          */
         "chatNotAvailableInOtherAccount": string;
         /**
@@ -6266,6 +6298,122 @@ export interface Locale extends ILocale {
              */
             "none": string;
         };
+        /**
+         * 削除されたメッセージ
+         */
+        "deletedMessage": string;
+        /**
+         * グループが削除されました
+         */
+        "roomDeleted": string;
+        /**
+         * グループから外す
+         */
+        "kickMember": string;
+        /**
+         * {name}さんを「{room}」から外しますか？このグループのメッセージは見られなくなり、戻るには再度招待が必要です。
+         */
+        "kickMemberConfirm": ParameterizedString<"name" | "room">;
+        /**
+         * 「{name}」から退出しますか？このグループのメッセージは見られなくなり、戻るには再度招待が必要です。
+         */
+        "leaveRoomConfirm": ParameterizedString<"name">;
+        /**
+         * 「{name}」を削除しますか？すべてのメンバーからグループとメッセージが消え、元に戻せません。
+         */
+        "deleteRoomConfirm": ParameterizedString<"name">;
+        /**
+         * このメッセージが見つかりません。すでに削除された可能性があります。
+         */
+        "messageUnavailable": string;
+        /**
+         * 処理できませんでした。しばらくしてからもう一度お試しください。
+         */
+        "actionFailed": string;
+        /**
+         * このユーザーにはメッセージを送れません。
+         */
+        "cannotChatWithUser": string;
+        /**
+         * このユーザーは招待できません。
+         */
+        "cannotInviteUser": string;
+        /**
+         * このユーザーはすでにこのグループのメンバーです。
+         */
+        "alreadyMember": string;
+        /**
+         * このユーザーはすでに招待済みです。
+         */
+        "alreadyInvited": string;
+        /**
+         * このグループは満員です。
+         */
+        "roomIsFull": string;
+        /**
+         * 参加しました
+         */
+        "invitationJoined": string;
+        /**
+         * 拒否しました
+         */
+        "invitationRejected": string;
+        /**
+         * この招待はすでに処理されたか、取り消されました。
+         */
+        "invitationGone": string;
+        /**
+         * 招待した人:
+         */
+        "invitedBy": string;
+        /**
+         * {n}人を招待できませんでした
+         */
+        "inviteFailedUsers": ParameterizedString<"n">;
+        /**
+         * {n}人は招待しました。
+         */
+        "inviteSentUsers": ParameterizedString<"n">;
+        /**
+         * グループの情報と削除
+         */
+        "roomInfoAndDelete": string;
+        /**
+         * {n}人が参加しています。
+         */
+        "roomMembersJoined": ParameterizedString<"n">;
+        /**
+         * {n}人を招待しました。承認するとこのグループに参加します。状況はメンバータブで確認できます。
+         */
+        "roomInvitationsWaiting": ParameterizedString<"n">;
+        /**
+         * メンバーを見る
+         */
+        "viewMembers": string;
+        /**
+         * このメンバーはすでにグループにいません。
+         */
+        "memberAlreadyGone": string;
+        /**
+         * メッセージを編集中
+         */
+        "editingMessage": string;
+        /**
+         * このグループから退出しました。再参加するには招待が必要です。
+         */
+        "removedFromRoom": string;
+        /**
+         * このグループを開けません。削除されたか、参加していないグループです。
+         */
+        "roomUnavailable": string;
+        /**
+         * {x}さんに送信された招待をキャンセルしますか？
+         */
+        "invitationCancelAreYouSure": ParameterizedString<"x">;
+        /**
+         * {x}さんへの招待をキャンセル
+         */
+        "cancelInvitationTo": ParameterizedString<"x">;
     };
     "_emojiPalette": {
         /**
@@ -8216,6 +8364,262 @@ export interface Locale extends ILocale {
                  */
                 "flavor": string;
             };
+        };
+    };
+    "_voiceCall": {
+        /**
+         * 参加者を表示
+         */
+        "showParticipants": string;
+        /**
+         * 参加者を隠す
+         */
+        "hideParticipants": string;
+        /**
+         * チャットを開く
+         */
+        "openChat": string;
+        /**
+         * チャットを閉じる
+         */
+        "closeChat": string;
+        /**
+         * ほか{n}人
+         */
+        "otherParticipants": ParameterizedString<"n">;
+        /**
+         * マイクオン
+         */
+        "micOn": string;
+        /**
+         * マイク入力を検出
+         */
+        "micInputDetected": string;
+        /**
+         * マイクオフ
+         */
+        "micMuted": string;
+        /**
+         * スピーカーオフ
+         */
+        "deafened": string;
+        /**
+         * マイクを使用できません。
+         */
+        "micUnavailable": string;
+        /**
+         * 通話サーバーに接続できませんでした。
+         */
+        "connectionFailed": string;
+        /**
+         * この通話は{host}で開かれます。{host}にはあなたのIPアドレスが見えます。
+         */
+        "remoteHostNotice": ParameterizedString<"host" | "host">;
+        /**
+         * このルームのサーバーは通話に対応していません。
+         */
+        "remoteHostUnsupported": string;
+        /**
+         * 別のタブで通話に参加しました。
+         */
+        "joinedFromAnotherTab": string;
+        /**
+         * 通話から外されました。
+         */
+        "removedFromCall": string;
+        /**
+         * 通話が終了しました。
+         */
+        "callEnded": string;
+        /**
+         * 通話に参加
+         */
+        "join": string;
+        /**
+         * 通話を開始
+         */
+        "start": string;
+        /**
+         * 通話から退出
+         */
+        "leave": string;
+        /**
+         * マイクをオフ
+         */
+        "mute": string;
+        /**
+         * マイクをオン
+         */
+        "unmute": string;
+        /**
+         * スピーカーをオフ
+         */
+        "deafen": string;
+        /**
+         * スピーカーをオン
+         */
+        "undeafen": string;
+        /**
+         * 通話中
+         */
+        "inCall": string;
+        /**
+         * 接続中…
+         */
+        "connecting": string;
+        /**
+         * 再接続中…
+         */
+        "reconnecting": string;
+        /**
+         * タップして音声を再生
+         */
+        "enableAudio": string;
+        /**
+         * ルームに戻る
+         */
+        "backToRoom": string;
+        /**
+         * 通話設定
+         */
+        "settings": string;
+        /**
+         * マイク
+         */
+        "inputDevice": string;
+        /**
+         * スピーカー
+         */
+        "outputDevice": string;
+        /**
+         * エコーキャンセル
+         */
+        "echoCancellation": string;
+        /**
+         * ノイズ抑制
+         */
+        "noiseSuppression": string;
+        /**
+         * 自動音量調整
+         */
+        "autoGainControl": string;
+        /**
+         * 画面を共有
+         */
+        "shareScreen": string;
+        /**
+         * 共有を停止
+         */
+        "stopSharing": string;
+        /**
+         * 共有を見る
+         */
+        "watchStream": string;
+        /**
+         * 視聴をやめる
+         */
+        "stopWatching": string;
+        /**
+         * 画面共有中
+         */
+        "sharingScreen": string;
+        /**
+         * 音声も共有
+         */
+        "shareAudio": string;
+        /**
+         * 共有画質
+         */
+        "screenShareQuality": string;
+        /**
+         * 画面共有を開始できませんでした。
+         */
+        "screenShareFailed": string;
+        /**
+         * 画面共有が許可されていません。ブラウザやOSの設定で画面の共有を許可してください。
+         */
+        "screenSharePermissionDenied": string;
+        /**
+         * 全画面
+         */
+        "fullscreen": string;
+        /**
+         * ピクチャーインピクチャー
+         */
+        "pictureInPicture": string;
+        /**
+         * {name}さんの共有画面を見る
+         */
+        "watchScreenOf": ParameterizedString<"name">;
+        /**
+         * {name}さんの共有画面
+         */
+        "screenShareOf": ParameterizedString<"name">;
+        /**
+         * 大きく表示
+         */
+        "focusScreen": string;
+        /**
+         * 声の音量
+         */
+        "voiceVolume": string;
+        /**
+         * 共有画面の音量
+         */
+        "screenShareVolume": string;
+        /**
+         * 強制ミュート
+         */
+        "forceMute": string;
+        /**
+         * 通話から外す
+         */
+        "kick": string;
+        /**
+         * {name}さんを通話から外しますか？
+         */
+        "kickConfirm": ParameterizedString<"name">;
+        /**
+         * {n}人が通話中
+         */
+        "inCallCount": ParameterizedString<"n">;
+        /**
+         * チャットを左に移動
+         */
+        "moveChatLeft": string;
+        /**
+         * チャットを右に移動
+         */
+        "moveChatRight": string;
+        /**
+         * 録音ファイルをドライブに保存しました
+         */
+        "recordingSaved": string;
+        /**
+         * 録音を開始
+         */
+        "startRecording": string;
+        /**
+         * 録音を停止
+         */
+        "stopRecording": string;
+        /**
+         * 録音中
+         */
+        "recording": string;
+        "_quality": {
+            /**
+             * くっきり (1080p 15fps)
+             */
+            "sharp": string;
+            /**
+             * なめらか (720p 30fps)
+             */
+            "smooth": string;
+            /**
+             * 高画質 (1080p 30fps)
+             */
+            "high": string;
         };
     };
     "_role": {
@@ -13690,262 +14094,6 @@ export interface Locale extends ILocale {
          * MFM
          */
         "mfm": string;
-    };
-    "_voiceCall": {
-        /**
-         * 参加者を表示
-         */
-        "showParticipants": string;
-        /**
-         * 参加者を隠す
-         */
-        "hideParticipants": string;
-        /**
-         * チャットを開く
-         */
-        "openChat": string;
-        /**
-         * チャットを閉じる
-         */
-        "closeChat": string;
-        /**
-         * ほか{n}人
-         */
-        "otherParticipants": ParameterizedString<"n">;
-        /**
-         * マイクオン
-         */
-        "micOn": string;
-        /**
-         * マイク入力を検出
-         */
-        "micInputDetected": string;
-        /**
-         * マイクオフ
-         */
-        "micMuted": string;
-        /**
-         * スピーカーオフ
-         */
-        "deafened": string;
-        /**
-         * マイクを使用できません。
-         */
-        "micUnavailable": string;
-        /**
-         * 通話サーバーに接続できませんでした。
-         */
-        "connectionFailed": string;
-        /**
-         * この通話は{host}で開かれます。{host}にはあなたのIPアドレスが見えます。
-         */
-        "remoteHostNotice": ParameterizedString<"host" | "host">;
-        /**
-         * 録音ファイルをドライブに保存しました
-         */
-        "recordingSaved": string;
-        /**
-         * 録音を開始
-         */
-        "startRecording": string;
-        /**
-         * 録音を停止
-         */
-        "stopRecording": string;
-        /**
-         * 録音中
-         */
-        "recording": string;
-        /**
-         * このルームのサーバーは通話に対応していません。
-         */
-        "remoteHostUnsupported": string;
-        /**
-         * 別のタブで通話に参加しました。
-         */
-        "joinedFromAnotherTab": string;
-        /**
-         * 通話から外されました。
-         */
-        "removedFromCall": string;
-        /**
-         * 通話が終了しました。
-         */
-        "callEnded": string;
-        /**
-         * 通話に参加
-         */
-        "join": string;
-        /**
-         * 通話を開始
-         */
-        "start": string;
-        /**
-         * 通話から退出
-         */
-        "leave": string;
-        /**
-         * マイクをオフ
-         */
-        "mute": string;
-        /**
-         * マイクをオン
-         */
-        "unmute": string;
-        /**
-         * スピーカーをオフ
-         */
-        "deafen": string;
-        /**
-         * スピーカーをオン
-         */
-        "undeafen": string;
-        /**
-         * 通話中
-         */
-        "inCall": string;
-        /**
-         * 接続中…
-         */
-        "connecting": string;
-        /**
-         * 再接続中…
-         */
-        "reconnecting": string;
-        /**
-         * タップして音声を再生
-         */
-        "enableAudio": string;
-        /**
-         * ルームに戻る
-         */
-        "backToRoom": string;
-        /**
-         * 通話設定
-         */
-        "settings": string;
-        /**
-         * マイク
-         */
-        "inputDevice": string;
-        /**
-         * スピーカー
-         */
-        "outputDevice": string;
-        /**
-         * エコーキャンセル
-         */
-        "echoCancellation": string;
-        /**
-         * ノイズ抑制
-         */
-        "noiseSuppression": string;
-        /**
-         * 自動音量調整
-         */
-        "autoGainControl": string;
-        /**
-         * 画面を共有
-         */
-        "shareScreen": string;
-        /**
-         * 共有を停止
-         */
-        "stopSharing": string;
-        /**
-         * 共有を見る
-         */
-        "watchStream": string;
-        /**
-         * 視聴をやめる
-         */
-        "stopWatching": string;
-        /**
-         * 画面共有中
-         */
-        "sharingScreen": string;
-        /**
-         * 音声も共有
-         */
-        "shareAudio": string;
-        /**
-         * 共有画質
-         */
-        "screenShareQuality": string;
-        /**
-         * 画面共有を開始できませんでした。
-         */
-        "screenShareFailed": string;
-        /**
-         * 画面共有が許可されていません。ブラウザやOSの設定で画面の共有を許可してください。
-         */
-        "screenSharePermissionDenied": string;
-        /**
-         * 全画面
-         */
-        "fullscreen": string;
-        /**
-         * ピクチャーインピクチャー
-         */
-        "pictureInPicture": string;
-        /**
-         * {name}さんの共有画面を見る
-         */
-        "watchScreenOf": ParameterizedString<"name">;
-        /**
-         * {name}さんの共有画面
-         */
-        "screenShareOf": ParameterizedString<"name">;
-        /**
-         * 大きく表示
-         */
-        "focusScreen": string;
-        "_quality": {
-            /**
-             * くっきり (1080p 15fps)
-             */
-            "sharp": string;
-            /**
-             * なめらか (720p 30fps)
-             */
-            "smooth": string;
-            /**
-             * 高画質 (1080p 30fps)
-             */
-            "high": string;
-        };
-        /**
-         * 声の音量
-         */
-        "voiceVolume": string;
-        /**
-         * 共有画面の音量
-         */
-        "screenShareVolume": string;
-        /**
-         * 強制ミュート
-         */
-        "forceMute": string;
-        /**
-         * 通話から外す
-         */
-        "kick": string;
-        /**
-         * {name}さんを通話から外しますか？
-         */
-        "kickConfirm": ParameterizedString<"name">;
-        /**
-         * {n}人が通話中
-         */
-        "inCallCount": ParameterizedString<"n">;
-        /**
-         * チャットを左に移動
-         */
-        "moveChatLeft": string;
-        /**
-         * チャットを右に移動
-         */
-        "moveChatRight": string;
     };
     "_kyunetTranslation": {
         /**

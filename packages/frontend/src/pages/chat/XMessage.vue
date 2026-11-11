@@ -4,33 +4,40 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[$style.root, { [$style.isMe]: isMe }]">
-	<MkAvatar :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
-	<div :class="[$style.body, message.file != null ? $style.fullWidth : null]" @contextmenu.stop="onContextmenu">
-		<div :class="$style.header"><MkUserName v-if="!isMe && prefer.s['chat.showSenderName'] && message.fromUser != null" :user="message.fromUser"/></div>
-		<MkFukidashi :class="$style.fukidashi" :tail="isMe ? 'right' : 'left'" :fullWidth="message.file != null" :accented="isMe">
-			<Mfm
-				v-if="message.text"
-				ref="text"
-				class="_selectable"
-				:text="message.text"
-				:author="message.fromUser"
-				:i="$i"
-				:nyaize="'respect'"
-				:emojiUrls="message.emojis"
-				:enableEmojiMenu="true"
-				:enableEmojiMenuReaction="true"
-			/>
-			<MkMediaList v-if="message.file" :mediaList="[message.file]" :user="message.fromUser"/>
+<div :class="[$style.root, { [$style.isMe]: isMe, [$style.continued]: !isFirstInGroup }]">
+	<MkAvatar v-if="!isMe && isFirstInGroup" :class="[$style.avatar, prefer.s.useStickyIcons ? $style.useSticky : null]" :user="message.fromUser!" :link="!isMe" :preview="false"/>
+	<!-- まとまりの2つ目以降もアバターの幅だけ空けて、吹き出しの位置を揃える -->
+	<div v-else-if="!isMe" :class="$style.avatarSpace"></div>
+	<div :class="[$style.body, hasFiles ? $style.fullWidth : null]" tabindex="0" aria-haspopup="menu" @keydown.self="onMenuKeydown" @contextmenu.stop="onContextmenu">
+		<div v-if="isFirstInGroup" :class="$style.header"><MkUserName v-if="!isMe && prefer.s['chat.showSenderName'] && message.fromUser != null" :user="message.fromUser"/></div>
+		<MkFukidashi :class="[$style.fukidashi, { [$style.noTailLeft]: !isFirstInGroup && !isMe }]" :tail="!isFirstInGroup ? 'none' : isMe ? 'right' : 'left'" :fullWidth="hasFiles" :accented="isMe">
+			<span v-if="deletedAt" :class="$style.deletedMessage">{{ i18n.ts._chat.deletedMessage }}</span>
+			<template v-else>
+				<Mfm
+					v-if="message.text"
+					ref="text"
+					class="_selectable"
+					:text="message.text"
+					:author="message.fromUser"
+					:i="$i"
+					:nyaize="'respect'"
+					:emojiUrls="message.emojis"
+					:enableEmojiMenu="true"
+					:enableEmojiMenuReaction="canReact"
+				/>
+				<MkMediaList v-if="hasFiles" :mediaList="message.files" :user="message.fromUser"/>
+			</template>
 		</MkFukidashi>
 		<MkUrlPreview v-for="url in urls" :key="url" :url="url" style="margin: 8px 0;"/>
-		<div :class="$style.footer">
-			<button class="_textButton" style="color: currentColor;" @click="showMenu"><i class="ti ti-dots-circle-horizontal"></i></button>
+		<div :class="[$style.footer, { [$style.groupedFooter]: !isLastInGroup }]">
+			<button class="_textButton" :class="$style.menuButton" style="color: currentColor;" :aria-label="i18n.ts.menu" @click="showMenu"><i class="ti ti-dots-circle-horizontal"></i></button>
 			<MkTime :class="$style.time" :time="message.createdAt"/>
+			<span v-if="editedAt && !deletedAt" :class="$style.edited">{{ i18n.ts.edited }}</span>
 			<MkA v-if="isSearchResult && 'toRoom' in message && message.toRoom != null" :to="`/chat/room/${message.toRoomId}`">{{ message.toRoom.name }}</MkA>
 			<MkA v-if="isSearchResult && 'toUser' in message && message.toUser != null && isMe" :to="`/chat/user/${message.toUserId}`">@{{ message.toUser.username }}</MkA>
 		</div>
 		<TransitionGroup
+			v-if="!deletedAt"
 			:enterActiveClass="prefer.s.animation ? $style.transition_reaction_enterActive : ''"
 			:leaveActiveClass="prefer.s.animation ? $style.transition_reaction_leaveActive : ''"
 			:enterFromClass="prefer.s.animation ? $style.transition_reaction_enterFrom : ''"
@@ -53,13 +60,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, defineAsyncComponent, provide } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, provide, ref } from 'vue';
 import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { url } from '@@/js/config.js';
 import { isLink } from '@@/js/is-link.js';
 import type { MenuItem } from '@/types/menu.js';
 import type { NormalizedChatMessage } from './room.vue';
+import { chatErrorText } from './chat-errors.js';
 import { extractUrlFromMfm } from '@/utility/extract-url-from-mfm.js';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
 import { ensureSignin } from '@/i.js';
@@ -78,69 +86,107 @@ import { getHTMLElementOrNull } from '@/utility/get-dom-node-or-null.js';
 
 const $i = ensureSignin();
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	message: NormalizedChatMessage | Misskey.entities.ChatMessage;
 	isSearchResult?: boolean;
+	canEdit?: boolean;
+	// ルームの画面のメッセージには toRoom が付かないので、アーカイブの状態はルームから受け取る
+	roomArchived?: boolean;
+	// 同じ送信者が続けて送ったメッセージのまとまりの中での位置。省略すると単独のメッセージとして表示する。
+	// 新着のたびに全部の吹き出しを描き直さないよう、オブジェクトではなく真偽値で受け取る
+	firstInGroup?: boolean;
+	lastInGroup?: boolean;
+}>(), {
+	firstInGroup: true,
+	lastInGroup: true,
+	canEdit: false,
+	roomArchived: false,
+});
+
+const emit = defineEmits<{
+	(ev: 'edit', message: NormalizedChatMessage | Misskey.entities.ChatMessage): void;
 }>();
 
 const isMe = computed(() => props.message.fromUserId === $i.id);
-const urls = computed(() => props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
+const editedAt = computed(() => (props.message as NormalizedChatMessage).editedAt ?? null);
+const deletedAt = computed(() => (props.message as NormalizedChatMessage).deletedAt ?? null);
+const hasFiles = computed(() => deletedAt.value == null && props.message.files.length > 0);
+const unmounted = ref(false);
+const isReadOnly = computed(() => props.roomArchived || ('toRoom' in props.message && props.message.toRoom?.isArchived === true));
+// 自分のメッセージにはリアクションできない。サーバーは NO_SUCH_MESSAGE で断る
+const canReact = computed(() => !isMe.value && !unmounted.value && !deletedAt.value && !isReadOnly.value && $i.policies.chatAvailability === 'available');
+onBeforeUnmount(() => { unmounted.value = true; });
+// 検索結果は前後のメッセージと関係なく並ぶのでまとめない
+const isFirstInGroup = computed(() => props.isSearchResult === true || props.firstInGroup);
+const isLastInGroup = computed(() => props.isSearchResult === true || props.lastInGroup);
+const urls = computed(() => !deletedAt.value && props.message.text ? extractUrlFromMfm(mfm.parse(props.message.text)) : []);
 
 provide(DI.mfmEmojiReactCallback, (reaction) => {
-	if ($i.policies.chatAvailability !== 'available') return;
+	if (!canReact.value) return;
 
 	sound.playMisskeySfx('reaction');
-	misskeyApi('chat/messages/react', {
-		messageId: props.message.id,
-		reaction: reaction,
-	});
+	sendReaction('chat/messages/react', reaction);
 });
 
+function sendReaction(endpoint: 'chat/messages/react' | 'chat/messages/unreact', reaction: string) {
+	misskeyApi(endpoint, {
+		messageId: props.message.id,
+		reaction: reaction,
+	}).catch(err => {
+		os.alert({ type: 'error', title: i18n.ts.somethingHappened, text: chatErrorText(err) });
+	});
+}
+
 function react(ev: PointerEvent) {
-	if ($i.policies.chatAvailability !== 'available') return;
+	if (!canReact.value) return;
 
 	const targetEl = getHTMLElementOrNull(ev.currentTarget ?? ev.target);
 	if (!targetEl) return;
 
 	reactionPicker.show(targetEl, null, async (reaction) => {
+		if (!canReact.value) return;
 		sound.playMisskeySfx('reaction');
-		misskeyApi('chat/messages/react', {
-			messageId: props.message.id,
-			reaction: reaction,
-		});
+		sendReaction('chat/messages/react', reaction);
 	});
 }
 
 function onReactionClick(record: Misskey.entities.ChatMessage['reactions'][0]) {
-	if ($i.policies.chatAvailability !== 'available') return;
+	if (!canReact.value) return;
 
 	if (record.user.id === $i.id) {
-		misskeyApi('chat/messages/unreact', {
-			messageId: props.message.id,
-			reaction: record.reaction,
-		});
-	} else {
+		sendReaction('chat/messages/unreact', record.reaction);
+	} else if (!/@[\w.-]/.test(record.reaction)) { // 他サーバーのカスタム絵文字はこのサーバーからはリアクションできない
 		if (!props.message.reactions.some(r => r.user.id === $i.id && r.reaction === record.reaction)) {
 			sound.playMisskeySfx('reaction');
-			misskeyApi('chat/messages/react', {
-				messageId: props.message.id,
-				reaction: record.reaction,
-			});
+			sendReaction('chat/messages/react', record.reaction);
 		}
 	}
 }
 
 function onContextmenu(ev: PointerEvent) {
 	if (ev.target && isLink(ev.target as HTMLElement)) return;
-	if (window.getSelection()?.toString() !== '') return;
+	// 指で長押しすると言葉が選ばれてからここへ来る。コピーはメニューにあるので、選択を残さずメニューを開く
+	if (ev.pointerType === 'touch') window.getSelection()?.removeAllRanges();
+	else if (window.getSelection()?.toString() !== '') return;
 
-	showMenu(ev, true);
+	os.contextMenu(getMenu(), ev);
 }
 
-function showMenu(ev: PointerEvent, contextmenu = false) {
+function onMenuKeydown(ev: KeyboardEvent) {
+	if (ev.key !== 'Enter' && ev.key !== 'ContextMenu' && !(ev.key === 'F10' && ev.shiftKey)) return;
+	ev.preventDefault();
+	ev.stopPropagation();
+	showMenu(ev);
+}
+
+function showMenu(ev: PointerEvent | KeyboardEvent) {
+	os.popupMenu(getMenu(), ev.currentTarget ?? ev.target);
+}
+
+function getMenu(): MenuItem[] {
 	const menu: MenuItem[] = [];
 
-	if (!isMe.value && $i.policies.chatAvailability === 'available') {
+	if (!isMe.value && canReact.value) {
 		menu.push({
 			text: i18n.ts.reaction,
 			icon: 'ti ti-mood-plus',
@@ -154,26 +200,46 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		});
 	}
 
-	menu.push({
-		text: i18n.ts.copyContent,
-		icon: 'ti ti-copy',
-		action: () => {
-			copyToClipboard(props.message.text ?? '');
-		},
-	});
+	if (!deletedAt.value) {
+		menu.push({
+			text: i18n.ts.copyContent,
+			icon: 'ti ti-copy',
+			action: () => {
+				copyToClipboard(props.message.text ?? '');
+			},
+		});
 
-	menu.push({
-		type: 'divider',
-	});
+		menu.push({
+			type: 'divider',
+		});
+	}
 
-	if (isMe.value && $i.policies.chatAvailability === 'available') {
+	if (isMe.value && !deletedAt.value && !isReadOnly.value && $i.policies.chatAvailability === 'available') {
+		if (props.canEdit) {
+			menu.push({
+				text: i18n.ts.edit,
+				icon: 'ti ti-pencil',
+				action: () => {
+					emit('edit', props.message);
+				},
+			});
+		}
+
 		menu.push({
 			text: i18n.ts.delete,
 			icon: 'ti ti-trash',
 			danger: true,
-			action: () => {
+			action: async () => {
+				const { canceled } = await os.confirm({
+					type: 'warning',
+					text: i18n.ts.deleteConfirm,
+				});
+				if (canceled) return;
+
 				misskeyApi('chat/messages/delete', {
 					messageId: props.message.id,
+				}).catch(err => {
+					os.alert({ type: 'error', title: i18n.ts.somethingHappened, text: chatErrorText(err) });
 				});
 			},
 		});
@@ -195,11 +261,7 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		});
 	}
 
-	if (contextmenu) {
-		os.contextMenu(menu, ev);
-	} else {
-		os.popupMenu(menu, ev.currentTarget ?? ev.target);
-	}
+	return menu;
 }
 </script>
 
@@ -230,6 +292,13 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 			flex-direction: row-reverse;
 		}
 	}
+
+	// まとまりの2つ目以降は名前の行がないので、前の吹き出しに詰めて並べる
+	&.continued {
+		.body {
+			padding-top: 0;
+		}
+	}
 }
 
 .avatar {
@@ -241,6 +310,12 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		position: sticky;
 		top: calc(16px + var(--MI-stickyTop, 0px));
 	}
+}
+
+// .avatar と同じ幅
+.avatarSpace {
+	flex-shrink: 0;
+	width: 50px;
 }
 
 @container (max-width: 450px) {
@@ -257,16 +332,33 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 		height: 42px;
 	}
 
+	.avatarSpace {
+		width: 42px;
+	}
+
 	.fukidashi {
 		font-size: 90%;
 	}
 }
 
 .body {
+	padding-top: 4px;
 	margin: 0 12px;
+	box-sizing: border-box;
 
 	&.fullWidth {
 		width: 100%;
+	}
+}
+
+// 指で長押しするとメニューが開き、コピーもそこにあるので、言葉まで選ばれないようにする。
+// iOS の Safari は長押しで contextmenu を出さない (メニューが開かない) ので、これまでどおり選べるままにする
+@media (hover: none) and (pointer: coarse) {
+	@supports not (-webkit-touch-callout: none) {
+		.body :global(._selectable) {
+			user-select: none;
+			-webkit-user-select: none;
+		}
 	}
 }
 
@@ -277,6 +369,11 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 
 .fukidashi {
 	text-align: left;
+
+	// 尻尾のない吹き出しは尻尾の分の余白が右側にしか付かないので、左寄せのときは左側にも付けて尻尾のある吹き出しと左端を揃える
+	&.noTailLeft {
+		padding-left: calc(var(--fukidashi-radius) * .13);
+	}
 }
 
 .content {
@@ -293,8 +390,37 @@ function showMenu(ev: PointerEvent, contextmenu = false) {
 	font-size: 75%;
 }
 
+// まとまりの途中は普段の余白を詰め、キーボードで入ったときはメニューと時刻を出す。
+.groupedFooter {
+	display: none;
+
+	.body:focus-within & {
+		display: flex;
+	}
+}
+
+.menuButton {
+	position: relative;
+
+	// アイコンは小さいままで、押せる範囲だけを広げる
+	&::before {
+		content: '';
+		position: absolute;
+		inset: -8px -10px;
+	}
+}
+
 .time {
 	opacity: 0.5;
+}
+
+.edited {
+	opacity: 0.5;
+}
+
+.deletedMessage {
+	opacity: 0.6;
+	font-style: italic;
 }
 
 .reactions {

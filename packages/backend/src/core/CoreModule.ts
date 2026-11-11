@@ -80,6 +80,7 @@ import { FeaturedService } from './FeaturedService.js';
 import { FanoutTimelineService } from './FanoutTimelineService.js';
 import { ChannelFollowingService } from './ChannelFollowingService.js';
 import { ChatService } from './ChatService.js';
+import { ChatRosterService } from './ChatRosterService.js';
 import { ChatVoiceService } from './ChatVoiceService.js';
 import { HostPolicyService } from './HostPolicyService.js';
 import { CloudflareTurnService } from './CloudflareTurnService.js';
@@ -246,6 +247,7 @@ const $FanoutTimelineEndpointService: Provider = { provide: 'FanoutTimelineEndpo
 const $ChannelFollowingService: Provider = { provide: 'ChannelFollowingService', useExisting: ChannelFollowingService };
 const $ChannelMutingService: Provider = { provide: 'ChannelMutingService', useExisting: ChannelMutingService };
 const $ChatService: Provider = { provide: 'ChatService', useExisting: ChatService };
+const $ChatRosterService: Provider = { provide: 'ChatRosterService', useExisting: ChatRosterService };
 const $ChatVoiceService: Provider = { provide: 'ChatVoiceService', useExisting: ChatVoiceService };
 const $HostPolicyService: Provider = { provide: 'HostPolicyService', useExisting: HostPolicyService };
 const $CloudflareTurnService: Provider = { provide: 'CloudflareTurnService', useExisting: CloudflareTurnService };
@@ -413,6 +415,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		ChatRosterService,
 		ChatVoiceService,
 		HostPolicyService,
 		CloudflareTurnService,
@@ -577,6 +580,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$ChannelFollowingService,
 		$ChannelMutingService,
 		$ChatService,
+		$ChatRosterService,
 		$ChatVoiceService,
 		$HostPolicyService,
 		$CloudflareTurnService,
@@ -741,6 +745,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		ChatRosterService,
 		ChatVoiceService,
 		HostPolicyService,
 		CloudflareTurnService,
@@ -903,6 +908,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$ChannelFollowingService,
 		$ChannelMutingService,
 		$ChatService,
+		$ChatRosterService,
 		$ChatVoiceService,
 		$HostPolicyService,
 		$CloudflareTurnService,
