@@ -10,7 +10,7 @@ import * as Redis from 'ioredis';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import type { KyunetTranslationSettingsRepository } from '@/models/_.js';
-import type { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
+import type { MiKyunetTranslationSetting, KyunetTranslationProvider } from '@/models/KyunetTranslationSetting.js';
 import type { MiMeta } from '@/models/Meta.js';
 import { bindThis } from '@/decorators.js';
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
@@ -85,9 +85,22 @@ export class KyunetTranslationSettingService implements OnModuleInit, OnApplicat
 	public isAvailable(): boolean {
 		const s = this.cache;
 		if (s == null || !s.enabled) return false;
-		// arti: the DeepL provider reuses the instance-wide DeepL key instead of baseUrl / model
-		if (s.provider === 'deepl') return this.meta.deeplAuthKey != null && this.meta.deeplAuthKey !== '';
+		return this.isProviderConfigured(s, s.provider);
+	}
+
+	/** arti: whether a provider has what it needs. DeepL reuses the instance-wide DeepL key instead of baseUrl / model. */
+	@bindThis
+	public isProviderConfigured(s: MiKyunetTranslationSetting, provider: KyunetTranslationProvider): boolean {
+		if (provider === 'deepl') return this.meta.deeplAuthKey != null && this.meta.deeplAuthKey !== '';
 		return s.baseUrl != null && s.baseUrl.trim() !== '' && s.model != null && s.model.trim() !== '';
+	}
+
+	/** arti: the provider to retry failed items with, or null when fallback is off or the other provider is not configured. */
+	@bindThis
+	public fallbackProvider(s: MiKyunetTranslationSetting): KyunetTranslationProvider | null {
+		if (!s.fallbackEnabled) return null;
+		const other: KyunetTranslationProvider = s.provider === 'deepl' ? 'openai' : 'deepl';
+		return this.isProviderConfigured(s, other) ? other : null;
 	}
 
 	@bindThis

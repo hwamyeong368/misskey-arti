@@ -91,6 +91,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 									<Mfm :text="kyunetDescription.text" :isNote="false" :author="user" class="_selectable"/>
 								</div>
 							</MkOmit>
+							<!-- arti: manual profile translation (also retries a failed automatic one) -->
+							<button v-if="kyunetProfileTranslatable" class="_textButton" :class="$style.kyunetProfileButton" :disabled="kyunetProfileBusy" @click="kyunetToggleProfile">
+								<i class="ti ti-language-hiragana"></i>
+								{{ kyunetProfileBusy ? i18n.ts._kyunetTranslation.translating : (kyunetProfileShown ? i18n.ts._kyunetTranslation.hideTranslation : (kyunetProfileFailed ? i18n.ts._kyunetTranslation.retryTranslation : i18n.ts._kyunetTranslation.translateProfile)) }}
+							</button>
 						</div>
 						<div class="fields system">
 							<dl v-if="user.location" class="field">
@@ -200,7 +205,7 @@ import { isBirthday } from '@/utility/is-birthday.js';
 import { shallowRef } from 'vue';
 import type { Ref } from 'vue';
 import { useKyunetTranslation, kyunetTargetLang, kyunetLangNames } from '@/composables/use-kyunet-translation.js';
-import type { KyunetTranslationResult } from '@/composables/use-kyunet-translation.js';
+import type { KyunetTranslationRef, KyunetTranslationResult } from '@/composables/use-kyunet-translation.js';
 import { isObviouslyTargetLang } from '@/utility/kyunet-script-gate.js';
 import type XTimeline_TypeReferenceOnly from './index.timeline.vue';
 
@@ -279,22 +284,79 @@ const kyunetDescriptionRef = shallowRef<KyunetReq | null>(null);
 const kyunetFieldNameRefs = shallowRef<(KyunetReq | null)[]>([]);
 const kyunetFieldValueRefs = shallowRef<(KyunetReq | null)[]>([]);
 
-function kyunetRequestProfile(): void {
-	const kt = useKyunetTranslation();
-	if (!prefer.s['kyunetTranslation.profiles'] || !kt.available.value) {
-		kyunetDescriptionRef.value = null;
-		kyunetFieldNameRefs.value = [];
-		kyunetFieldValueRefs.value = [];
-		return;
-	}
+const kt = useKyunetTranslation();
+
+function kyunetProfileTexts(): { ref: KyunetTranslationRef; slot: 'description' | 'name' | 'value'; index: number }[] {
 	const lang = kyunetTargetLang();
 	const want = (text: string | null | undefined) => text != null && text.trim() !== '' && !isObviouslyTargetLang(text, lang);
-	kyunetDescriptionRef.value = want(props.user.description) ? { result: kt.request({ type: 'user_description', id: props.user.id }) } : null;
-	kyunetFieldNameRefs.value = props.user.fields.map((f, index) => want(f.name) ? { result: kt.request({ type: 'user_field_name', id: props.user.id, index }) } : null);
-	kyunetFieldValueRefs.value = props.user.fields.map((f, index) => want(f.value) ? { result: kt.request({ type: 'user_field_value', id: props.user.id, index }) } : null);
+	const list: { ref: KyunetTranslationRef; slot: 'description' | 'name' | 'value'; index: number }[] = [];
+	if (want(props.user.description)) list.push({ ref: { type: 'user_description', id: props.user.id }, slot: 'description', index: 0 });
+	props.user.fields.forEach((f, index) => {
+		if (want(f.name)) list.push({ ref: { type: 'user_field_name', id: props.user.id, index }, slot: 'name', index });
+		if (want(f.value)) list.push({ ref: { type: 'user_field_value', id: props.user.id, index }, slot: 'value', index });
+	});
+	return list;
 }
 
-watch(() => [props.user.id, props.user.description, props.user.fields] as const, kyunetRequestProfile, { immediate: true, deep: true });
+function kyunetClearProfile(): void {
+	kyunetDescriptionRef.value = null;
+	kyunetFieldNameRefs.value = [];
+	kyunetFieldValueRefs.value = [];
+}
+
+function kyunetRequestProfile(): void {
+	// arti: also re-run when the preference or availability changes, so the page does not need to be reopened
+	if (!prefer.s['kyunetTranslation.profiles'] || !kt.available.value) {
+		kyunetClearProfile();
+		return;
+	}
+	const names: (KyunetReq | null)[] = props.user.fields.map(() => null);
+	const values: (KyunetReq | null)[] = props.user.fields.map(() => null);
+	kyunetDescriptionRef.value = null;
+	for (const item of kyunetProfileTexts()) {
+		const req = { result: kt.request(item.ref) };
+		if (item.slot === 'description') kyunetDescriptionRef.value = req;
+		else if (item.slot === 'name') names[item.index] = req;
+		else values[item.index] = req;
+	}
+	kyunetFieldNameRefs.value = names;
+	kyunetFieldValueRefs.value = values;
+}
+
+watch(() => [props.user.id, props.user.description, props.user.fields, prefer.s['kyunetTranslation.profiles'], kt.available.value] as const, kyunetRequestProfile, { immediate: true, deep: true });
+
+// arti: manual button. Translates (forced, so a failed attempt is retried) or hides the shown translation.
+const kyunetProfileBusy = ref(false);
+const kyunetProfileTranslatable = computed(() => kt.available.value && kyunetProfileTexts().length > 0);
+const kyunetAllReqs = computed(() => [kyunetDescriptionRef.value, ...kyunetFieldNameRefs.value, ...kyunetFieldValueRefs.value].filter((r): r is KyunetReq => r != null));
+const kyunetProfileShown = computed(() => kyunetAllReqs.value.some(r => r.result.value?.status === 'ok' && r.result.value.text != null));
+const kyunetProfileFailed = computed(() => kyunetAllReqs.value.some(r => r.result.value?.status === 'failed'));
+
+async function kyunetToggleProfile(): Promise<void> {
+	if (kyunetProfileShown.value && !kyunetProfileFailed.value) {
+		kyunetClearProfile();
+		return;
+	}
+	kyunetProfileBusy.value = true;
+	try {
+		const items = kyunetProfileTexts();
+		const settled = await Promise.all(items.map(item => kt.translateNow(item.ref)));
+		const names: (KyunetReq | null)[] = props.user.fields.map(() => null);
+		const values: (KyunetReq | null)[] = props.user.fields.map(() => null);
+		kyunetDescriptionRef.value = null;
+		items.forEach((item, k) => {
+			const req = { result: shallowRef<KyunetTranslationResult | null>(settled[k]) };
+			if (item.slot === 'description') kyunetDescriptionRef.value = req;
+			else if (item.slot === 'name') names[item.index] = req;
+			else values[item.index] = req;
+		});
+		kyunetFieldNameRefs.value = names;
+		kyunetFieldValueRefs.value = values;
+		if (settled.some(r => r.status !== 'ok')) os.toast(i18n.ts._kyunetTranslation.translationFailed);
+	} finally {
+		kyunetProfileBusy.value = false;
+	}
+}
 
 const kyunetDescription = computed(() => {
 	const res = kyunetDescriptionRef.value?.result.value;
@@ -848,6 +910,14 @@ onDeactivated(disposeBannerParallaxResizeObserver);
 
 .kyunetFieldTranslation {
 	opacity: 0.7;
+	font-size: 90%;
+}
+
+.kyunetProfileButton {
+	display: inline-flex;
+	gap: 4px;
+	align-items: center;
+	margin-top: 6px;
 	font-size: 90%;
 }
 </style>
