@@ -364,7 +364,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			}
 
 			// arti: the quoted note's quote policy (a plain renote is not a quote)
-			const isQuoting = data.text != null || data.fileIds.length > 0 || data.poll != null;
+			const isQuoting = data.text != null || data.cw != null || data.replyId != null || data.poll != null || data.fileIds.length > 0;
 			if (isQuoting && !(await this.noteInteractionPolicyService.isAllowed(renote, 'quote', user.id))) {
 				throw new IdentifiableError('6dcb7029-e36f-400c-9e14-a12626535640', 'The note does not allow you to quote it');
 			}

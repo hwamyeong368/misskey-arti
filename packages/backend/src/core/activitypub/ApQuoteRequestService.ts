@@ -17,6 +17,7 @@ import { IdService } from '@/core/IdService.js';
 import { QueueService } from '@/core/QueueService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { NoteInteractionPolicyService } from '@/core/NoteInteractionPolicyService.js';
+import { UserBlockingService } from '@/core/UserBlockingService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
 import { getApId } from '@/core/activitypub/type.js';
 import type { IQuoteRequest } from '@/core/activitypub/type.js';
@@ -41,6 +42,7 @@ export class ApQuoteRequestService {
 		private queueService: QueueService,
 		private userEntityService: UserEntityService,
 		private noteInteractionPolicyService: NoteInteractionPolicyService,
+		private userBlockingService: UserBlockingService,
 		private apRendererService: ApRendererService,
 	) {
 	}
@@ -74,7 +76,8 @@ export class ApQuoteRequestService {
 			instrument: instrumentUri,
 		};
 
-		const quotable = (note.visibility === 'public' || note.visibility === 'home') && !note.localOnly;
+		const quotable = (note.visibility === 'public' || note.visibility === 'home') && !note.localOnly
+			&& !(await this.userBlockingService.checkBlocked(note.userId, actor.id));
 		if (!quotable || !(await this.noteInteractionPolicyService.isAllowed(note, 'quote', actor.id))) {
 			const reject = this.apRendererService.addContext(this.apRendererService.renderReject(request as never, { id: note.userId }));
 			this.queueService.deliver({ id: note.userId }, reject, actor.inbox, false);
