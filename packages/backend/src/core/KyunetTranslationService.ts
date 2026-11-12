@@ -340,13 +340,13 @@ export class KyunetTranslationService {
 	/** arti: pieces that need no translation keep their original text. */
 	private mergePieces(pieces: TextPiece[], outs: NonNullable<PartOut>[]): LlmOutputItem {
 		const sourceLangs = [...new Set(outs.flatMap(o => o.out.sourceLangs))];
-		const translatedAny = outs.some(o => o.out.needsTranslation && o.out.text !== '');
-		if (!translatedAny) return { i: 0, needsTranslation: false, sourceLangs, text: '' };
+		const translatedAny = outs.some(o => o.out.text !== '');
+		if (!translatedAny) return { i: 0, sourceLangs, text: '' };
 		const text = pieces.map((piece, k) => {
 			const out = outs[k].out;
-			return (out.needsTranslation && out.text !== '' ? out.text : piece.text) + piece.sep;
+			return (out.text !== '' ? out.text : piece.text) + piece.sep;
 		}).join('');
-		return { i: 0, needsTranslation: true, sourceLangs, text };
+		return { i: 0, sourceLangs, text };
 	}
 
 	private chunk<T extends { text: string }>(units: T[], setting: MiKyunetTranslationSetting): T[][] {
