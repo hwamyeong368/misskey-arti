@@ -3,7 +3,9 @@ SPDX-FileCopyrightText: syuilo and misskey-project
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-<section v-if="call.available.value && !call.inThisCall.value" :class="$style.root" :aria-label="empty ? undefined : i18n.tsx._voiceCall.inCallCount({ n: call.participants.value.length })">
+<section v-if="call.available.value && !call.inThisCall.value" :class="[$style.root, { [$style.wrap]: call.someoneRecording.value }]" :aria-label="empty ? undefined : i18n.tsx._voiceCall.inCallCount({ n: call.participants.value.length })">
+	<!-- 録画している人がいることは、入る前に分かるようにする -->
+	<p v-if="call.someoneRecording.value" :class="$style.recordingNotice" role="status"><i class="ti ti-player-record" aria-hidden="true"></i> {{ i18n.ts._voiceCall.recordingInProgress }}</p>
 	<div ref="avatarsEl" :class="$style.avatars">
 		<!-- メニューに出すものが無い参加者 (通話に入っておらず持ち主でもないとき) は、押しても何も起きないボタンにせず、名前の付いた絵として出す -->
 		<component
@@ -70,6 +72,8 @@ function onContextMenu(p: typeof visible.value[number]['p'], menuable: boolean, 
 }
 </script>
 <style lang="scss" module>
+.wrap { flex-wrap: wrap; }
+.recordingNotice { flex-basis: 100%; margin: 0; color: var(--MI_THEME-error); font-weight: bold; }
 .root {
 	display: flex;
 	align-items: center;

@@ -34,6 +34,10 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			voiceCallMaxRecordingConversions: {
+				type: 'integer',
+				optional: false, nullable: false,
+			},
 			emailRequiredForSignup: {
 				type: 'boolean',
 				optional: false, nullable: false,
@@ -698,6 +702,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				cacheRemoteFiles: instance.cacheRemoteFiles,
 				cacheRemoteSensitiveFiles: instance.cacheRemoteSensitiveFiles,
 				enableRemoteVoiceCall: instance.enableRemoteVoiceCall,
+				voiceCallMaxRecordingConversions: instance.voiceCallMaxRecordingConversions,
 				pinnedUsers: instance.pinnedUsers,
 				hiddenTags: instance.hiddenTags,
 				blockedHosts: instance.blockedHosts,

@@ -570,6 +570,8 @@ const extension_context_definition = {
 	'_misskey_chatArchived': 'misskey:_misskey_chatArchived',
 	'_misskey_chatRoomMembers': { '@id': 'misskey:_misskey_chatRoomMembers', '@type': '@id', '@container': '@set' },
 	'_misskey_chatRoomRosterAt': 'misskey:_misskey_chatRoomRosterAt',
+	// 초코픽(cherrypick): 방 주인이 통화 녹화를 허락했는지
+	allowRecording: 'https://kokonect.link/ns#allowRecording',
 	'isCat': 'misskey:isCat',
 	// vcard
 	vcard: 'http://www.w3.org/2006/vcard/ns#',

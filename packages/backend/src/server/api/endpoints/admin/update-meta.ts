@@ -226,6 +226,7 @@ export const paramDef = {
 		allowExternalApRedirect: { type: 'boolean' },
 		enableRemoteNotesCleaning: { type: 'boolean' },
 		enableRemoteVoiceCall: { type: 'boolean' },
+		voiceCallMaxRecordingConversions: { type: 'integer', minimum: 0, maximum: 16 },
 		remoteNotesCleaningExpiryDaysForEachNotes: { type: 'number' },
 		remoteNotesCleaningMaxProcessingDurationInMinutes: { type: 'number' },
 		showRoleBadgesOfRemoteUsers: { type: 'boolean' },
@@ -783,6 +784,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.enableRemoteVoiceCall !== undefined) {
 				set.enableRemoteVoiceCall = ps.enableRemoteVoiceCall;
+			}
+
+			if (ps.voiceCallMaxRecordingConversions !== undefined) {
+				set.voiceCallMaxRecordingConversions = ps.voiceCallMaxRecordingConversions;
 			}
 
 			if (ps.remoteNotesCleaningExpiryDaysForEachNotes !== undefined) {

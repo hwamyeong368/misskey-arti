@@ -194,6 +194,7 @@ export interface ChatRoomEventTypes extends ChatEventTypes {
 		name: string;
 		description: string;
 		isArchived: boolean;
+		allowRecording: boolean;
 	};
 	membershipStarted: { userId: MiUser['id'] };
 	membershipEnded: { userId: MiUser['id'] };

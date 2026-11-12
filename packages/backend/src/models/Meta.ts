@@ -696,6 +696,14 @@ export class MiMeta {
 	})
 	public enableRemoteVoiceCall: boolean;
 
+	/**
+	 * 通話の録画を同時に変換できる数 (サーバー全体)
+	 */
+	@Column('integer', {
+		default: 2,
+	})
+	public voiceCallMaxRecordingConversions: number;
+
 	@Column('varchar', {
 		length: 128,
 		default: 'local',
