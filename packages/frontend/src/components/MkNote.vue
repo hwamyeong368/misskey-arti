@@ -165,10 +165,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<MkLoading v-if="translating || kyunetAutoTranslating" :em="true" :colored="false"/>
 					<i v-else class="ti ti-language-hiragana"></i>
 				</button>
-				<!-- kyunet: feat/mknote-menu-extract -->
-				<button v-if="remoteUrl" :class="$style.footerButton" class="_button" :aria-label="i18n.ts.showOnRemote" @click="showOnRemote()">
-					<i class="ti ti-external-link"></i>
-				</button>
 				<button ref="menuButton" :class="$style.footerButton" class="_button" @mousedown.prevent="showMenu()">
 					<i class="ti ti-dots"></i>
 				</button>
