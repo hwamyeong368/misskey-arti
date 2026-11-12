@@ -265,7 +265,7 @@ const foldersPaginator = markRaw(new Paginator('drive/folders', {
 
 const canFetchFolders = computed(() => !fetching.value && (foldersPaginator.order.value === 'oldest' ? foldersPaginator.canFetchNewer.value : foldersPaginator.canFetchOlder.value));
 
-let loadingMoreFolders: Promise<void> | null = null;
+let loadingMoreFolders: Promise<unknown> | null = null;
 
 async function fetchMoreFolders() {
 	if (fetching.value || loadingMoreFolders || refreshingFolders) return;
@@ -279,7 +279,7 @@ async function fetchMoreFolders() {
 
 const canFetchFiles = computed(() => !fetching.value && (filesPaginator.order.value === 'oldest' ? filesPaginator.canFetchNewer.value : filesPaginator.canFetchOlder.value));
 
-let loadingMoreFiles: Promise<void> | null = null;
+let loadingMoreFiles: Promise<unknown> | null = null;
 
 async function fetchMoreFiles() {
 	if (fetching.value || loadingMoreFiles || refreshingFiles) return;
