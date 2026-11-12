@@ -80,6 +80,7 @@ import { ClipService } from './ClipService.js';
 import { FeaturedService } from './FeaturedService.js';
 import { FanoutTimelineService } from './FanoutTimelineService.js';
 import { ChannelFollowingService } from './ChannelFollowingService.js';
+import { ChatDiceService } from './ChatDiceService.js';
 import { ChatService } from './ChatService.js';
 import { ChatRosterService } from './ChatRosterService.js';
 import { ChatVoiceService } from './ChatVoiceService.js';
@@ -425,6 +426,7 @@ const $KyunetImageLoader: Provider = { provide: 'KyunetImageLoader', useExisting
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		ChatDiceService,
 		ChatRosterService,
 		ChatVoiceService,
 		HostPolicyService,
@@ -763,6 +765,7 @@ const $KyunetImageLoader: Provider = { provide: 'KyunetImageLoader', useExisting
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		ChatDiceService,
 		ChatRosterService,
 		ChatVoiceService,
 		HostPolicyService,

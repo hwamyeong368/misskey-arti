@@ -5924,6 +5924,15 @@ export type components = {
             toUser?: components['schemas']['UserLite'] | null;
             toRoomId?: string | null;
             toRoom?: components['schemas']['ChatRoom'] | null;
+            dice?: {
+                version: number;
+                /** @enum {string} */
+                engine: '@dice-roller/rpg-dice-roller';
+                engineVersion: string;
+                notation: string;
+                total: number;
+                output: string;
+            } | null;
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
@@ -5950,6 +5959,15 @@ export type components = {
             fromUser?: components['schemas']['UserLite'];
             toUserId?: string | null;
             toRoomId?: string | null;
+            dice?: {
+                version: number;
+                /** @enum {string} */
+                engine: '@dice-roller/rpg-dice-roller';
+                engineVersion: string;
+                notation: string;
+                total: number;
+                output: string;
+            } | null;
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
@@ -5973,6 +5991,15 @@ export type components = {
             deletedAt?: string | null;
             fromUserId: string;
             toUserId: string;
+            dice?: {
+                version: number;
+                /** @enum {string} */
+                engine: '@dice-roller/rpg-dice-roller';
+                engineVersion: string;
+                notation: string;
+                total: number;
+                output: string;
+            } | null;
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
@@ -5996,6 +6023,15 @@ export type components = {
             fromUserId: string;
             fromUser: components['schemas']['UserLite'];
             toRoomId: string;
+            dice?: {
+                version: number;
+                /** @enum {string} */
+                engine: '@dice-roller/rpg-dice-roller';
+                engineVersion: string;
+                notation: string;
+                total: number;
+                output: string;
+            } | null;
             text?: string | null;
             fileId?: string | null;
             file?: components['schemas']['DriveFile'] | null;
