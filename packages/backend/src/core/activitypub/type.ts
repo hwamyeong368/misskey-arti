@@ -141,6 +141,7 @@ export interface IPost extends IObject {
 	_misskey_content?: string;
 	// arti: chat message federation (legacy Misskey talk format, from CherryPick)
 	_misskey_talk?: boolean;
+	_misskey_dice?: unknown;
 	quoteUrl?: string;
 	// arti: FEP-044f quote posts (Mastodon 4.5+)
 	quote?: string;
