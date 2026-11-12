@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { api, waitFire } from '../utils.js';
 import { waitForChatNotificationTurn } from '../misc/chat-notification-drain.js';
-import type * as Misskey from 'cherrypick-js';
+import type * as Misskey from 'misskey-js';
 
 async function signupDiceUser(username: string): Promise<Misskey.entities.SignupResponse> {
 	const response = await api('signup', { username, password: 'test' });

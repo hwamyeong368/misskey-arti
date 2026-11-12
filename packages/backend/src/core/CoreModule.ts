@@ -31,6 +31,8 @@ import { TruncateAccountService } from './TruncateAccountService.js';
 import { TruncateAccountKeepDriveService } from './TruncateAccountKeepDriveService.js';
 import { DownloadService } from './DownloadService.js';
 import { DriveService } from './DriveService.js';
+import { DriveDeletionService } from './DriveDeletionService.js';
+import { DriveFileUsageService } from './DriveFileUsageService.js';
 import { EmailService } from './EmailService.js';
 import { FederatedInstanceService } from './FederatedInstanceService.js';
 import { FetchInstanceMetadataService } from './FetchInstanceMetadataService.js';
@@ -370,6 +372,8 @@ const $KyunetImageLoader: Provider = { provide: 'KyunetImageLoader', useExisting
 		TruncateAccountKeepDriveService,
 		DownloadService,
 		DriveService,
+		DriveDeletionService,
+		DriveFileUsageService,
 		EmailService,
 		FederatedInstanceService,
 		FetchInstanceMetadataService,
@@ -709,6 +713,8 @@ const $KyunetImageLoader: Provider = { provide: 'KyunetImageLoader', useExisting
 		TruncateAccountKeepDriveService,
 		DownloadService,
 		DriveService,
+		DriveDeletionService,
+		DriveFileUsageService,
 		EmailService,
 		FederatedInstanceService,
 		FetchInstanceMetadataService,
