@@ -10,10 +10,10 @@ import type { LlmInputItem } from '@/core/KyunetTranslationLlmClient.js';
 import type { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
 import type { MiLocalUser } from '@/models/User.js';
 
-type Complete = (setting: unknown, targetLang: string, items: LlmInputItem[]) => Promise<{ items: { i: number; needsTranslation: boolean; sourceLangs: string[]; text: string }[]; raw: unknown; latencyMs: number }>;
+type Complete = (setting: unknown, targetLang: string, items: LlmInputItem[]) => Promise<{ items: { i: number; sourceLangs: string[]; text: string }[]; raw: unknown; latencyMs: number }>;
 
 const translateAll = (prefix: string): Complete => async (_s, _l, items) => ({
-	items: items.map(x => ({ i: x.i, needsTranslation: true, sourceLangs: ['ja'], text: `${prefix}${x.text}` })),
+	items: items.map(x => ({ i: x.i, sourceLangs: ['ja'], text: `${prefix}${x.text}` })),
 	raw: null,
 	latencyMs: 1,
 });
@@ -46,6 +46,7 @@ function setup(opts: { llm: Complete; deepl?: Complete; fallback?: boolean; prov
 		{} as never,
 		{} as never,
 		{ getLogger: () => ({ warn: () => {}, info: () => {} }) } as never,
+		{} as never, // KyunetImageLoader
 	);
 	const me = { id: 'me' } as MiLocalUser;
 	const run = (ids: string[]) => service.translate(ids.map(id => ({ type: 'user_description' as const, id })), 'ko-KR', me);
@@ -103,7 +104,7 @@ describe('KyunetTranslationService recovery (arti)', () => {
 		const text = `${'あ'.repeat(700)}\n\n${'가'.repeat(700)}`;
 		const { run } = setup({
 			llm: async (_s, _l, items) => ({
-				items: items.map(x => ({ i: x.i, needsTranslation: !x.text.startsWith('가'), sourceLangs: [x.text.startsWith('가') ? 'ko' : 'ja'], text: x.text.startsWith('가') ? '' : 'L' })),
+				items: items.map(x => ({ i: x.i, sourceLangs: [x.text.startsWith('가') ? 'ko' : 'ja'], text: x.text.startsWith('가') ? '' : 'L' })),
 				raw: null,
 				latencyMs: 1,
 			}),
