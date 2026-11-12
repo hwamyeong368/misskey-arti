@@ -77,7 +77,8 @@ import { i18n } from '@/i18n.js';
 import { DI } from '@/di.js';
 import { globalEvents, useGlobalEvent } from '@/events.js';
 import { isSeparatorNeeded, getSeparatorInfo } from '@/utility/timeline-date-separate.js';
-import { Paginator } from '@/utility/paginator.js';
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+import { Paginator, SECOND_FETCH_LIMIT } from '@/utility/paginator.js';
 
 const props = withDefaults(defineProps<{
 	src: BasicTimelineType | 'mentions' | 'directs' | 'list' | 'antenna' | 'channel' | 'role';
@@ -218,6 +219,12 @@ let scrollContainer: HTMLElement | null = null;
 
 function onScrollContainerScroll() {
 	if (isTop()) {
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		if (reloadPending) {
+			reloadPending = false;
+			reloadTimeline();
+			return;
+		}
 		paginator.releaseQueue();
 	}
 }
@@ -248,8 +255,44 @@ watch(visibility, () => {
 		if (isTop()) {
 			releaseQueue();
 		}
+		// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+		catchUp();
 	}
 });
+
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+// Upstream never refills what the socket missed while down; reuse the polling-mode fetchNewer path.
+// A full page means the gap is wider than the 30-item window, so reload instead of paging. If the user is
+// scrolled down, defer that reload until they come back to the top so their reading position survives.
+let reloadPending = false;
+let catchingUp = false;
+
+async function catchUp() {
+	if (!store.s.realtimeMode) return;
+	if (paginator.fetching.value || paginator.fetchingNewer.value || catchingUp) return;
+	if (reloadPending) return;
+	if (paginator.items.value.length === 0) {
+		// fetchNewer without a sinceId would insert newest-first data in reverse; start over instead
+		reloadTimeline();
+		return;
+	}
+
+	catchingUp = true;
+	const toQueue = !isTop() || isPausingUpdate;
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup - fix/reconnect-catchup-dup-order
+	const received = await paginator.fetchNewer({ toQueue, insertById: true }).finally(() => {
+		catchingUp = false;
+	});
+	if (received < SECOND_FETCH_LIMIT) return;
+
+	if (toQueue) {
+		reloadPending = true;
+	} else {
+		reloadTimeline();
+	}
+}
+
+useGlobalEvent('streamReconnected', catchUp);
 
 let adInsertionCounter = 0;
 
@@ -295,6 +338,13 @@ useGlobalEvent('noteRemovedFromAntenna', (antennaId, noteId) => {
 });
 
 function releaseQueue() {
+	// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+	if (reloadPending) {
+		reloadPending = false;
+		reloadTimeline();
+		scrollToTop(rootEl.value!);
+		return;
+	}
 	paginator.releaseQueue();
 	scrollToTop(rootEl.value!);
 }

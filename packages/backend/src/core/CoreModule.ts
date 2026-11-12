@@ -172,6 +172,8 @@ import { KyunetTranslationSettingService } from './KyunetTranslationSettingServi
 import { KyunetTranslationLlmClient } from './KyunetTranslationLlmClient.js';
 import { KyunetTranslationDeeplClient } from './KyunetTranslationDeeplClient.js';
 import { KyunetTranslationService } from './KyunetTranslationService.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { KyunetImageLoader } from './KyunetImageLoader.js';
 import { TelemetryService } from './telemetry/TelemetryService.js';
 import type { Provider } from '@nestjs/common';
 
@@ -341,6 +343,7 @@ const $KyunetTranslationSettingService: Provider = { provide: 'KyunetTranslation
 const $KyunetTranslationLlmClient: Provider = { provide: 'KyunetTranslationLlmClient', useExisting: KyunetTranslationLlmClient };
 const $KyunetTranslationDeeplClient: Provider = { provide: 'KyunetTranslationDeeplClient', useExisting: KyunetTranslationDeeplClient };
 const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService', useExisting: KyunetTranslationService };
+const $KyunetImageLoader: Provider = { provide: 'KyunetImageLoader', useExisting: KyunetImageLoader };
 //#endregion
 
 @Module({
@@ -435,6 +438,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		KyunetTranslationLlmClient,
 		KyunetTranslationDeeplClient,
 		KyunetTranslationService,
+		KyunetImageLoader,
 		PageService,
 
 		ChartLoggerService,
@@ -603,6 +607,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$KyunetTranslationLlmClient,
 		$KyunetTranslationDeeplClient,
 		$KyunetTranslationService,
+		$KyunetImageLoader,
 		$PageService,
 
 		$ChartLoggerService,
@@ -771,6 +776,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		KyunetTranslationLlmClient,
 		KyunetTranslationDeeplClient,
 		KyunetTranslationService,
+		KyunetImageLoader,
 		PageService,
 
 		FederationChart,
@@ -937,6 +943,7 @@ const $KyunetTranslationService: Provider = { provide: 'KyunetTranslationService
 		$KyunetTranslationLlmClient,
 		$KyunetTranslationDeeplClient,
 		$KyunetTranslationService,
+		$KyunetImageLoader,
 		$PageService,
 
 		$FederationChart,

@@ -13,9 +13,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	:moveClass="$style.transition_x_move"
 	tag="div" :class="$style.root"
 >
+	<!-- kyunet: feat/remote-reaction-to-local -->
+	<!-- The divider is drawn by ::before on the first remote button so no extra keyed node enters the TransitionGroup. -->
 	<XReaction
-		v-for="[reaction, count] in _reactions"
+		v-for="([reaction, count], i) in _reactions"
 		:key="reaction"
+		:class="{ [$style.firstRemote]: i === separatorIndex }"
 		:reaction="reaction"
 		:reactionEmojis="props.reactionEmojis"
 		:count="count"
@@ -30,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import * as Misskey from 'misskey-js';
-import { inject, watch, ref } from 'vue';
+import { computed, inject, watch, ref } from 'vue';
 import { TransitionGroup } from 'vue';
 import { isSupportedEmoji } from '@@/js/emojilist.js';
 import { getEmojiNameFromReaction, isLocalCustomEmojiReaction } from '@@/js/emoji-name.js';
@@ -38,6 +41,8 @@ import XReaction from '@/components/MkReactionsViewer.reaction.vue';
 import { $i } from '@/i.js';
 import { prefer } from '@/preferences.js';
 import { customEmojisMap } from '@/custom-emojis.js';
+// kyunet: feat/remote-reaction-to-local
+import { getLocalCounterpartReaction, isRemoteCustomEmojiReaction } from '@/utility/kyunet-remote-reaction-match.js';
 import { DI } from '@/di.js';
 
 const props = withDefaults(defineProps<{
@@ -61,6 +66,14 @@ const initialReactions = new Set(Object.keys(props.reactions));
 const _reactions = ref<[string, number][]>([]);
 const hasMoreReactions = ref(false);
 
+// kyunet: feat/remote-reaction-to-local
+// Index of the first remote reaction when both groups are shown; -1 hides the divider.
+const separatorIndex = computed(() => {
+	if (!prefer.s.separateRemoteReactions) return -1;
+	const i = _reactions.value.findIndex(([x]) => isRemoteCustomEmojiReaction(x));
+	return i > 0 ? i : -1;
+});
+
 if (props.myReaction != null && !(props.myReaction in props.reactions)) {
 	_reactions.value.push([props.myReaction, props.reactions[props.myReaction]]);
 }
@@ -79,7 +92,8 @@ function canReact(reaction: string) {
 	// TODO: CheckPermissions
 	return isLocalCustomEmojiReaction(reaction)
 		? customEmojisMap.has(getEmojiNameFromReaction(reaction))
-		: isSupportedEmoji(reaction);
+		// kyunet: feat/remote-reaction-to-local
+		: getLocalCounterpartReaction(reaction) != null || isSupportedEmoji(reaction);
 }
 
 watch([() => props.reactions, () => props.maxNumber], ([newSource, maxNumber]) => {
@@ -123,6 +137,15 @@ watch([() => props.reactions, () => props.maxNumber], ([newSource, maxNumber]) =
 		newReactions.push([props.myReaction, newSource[props.myReaction]]);
 	}
 
+	// kyunet: feat/remote-reaction-to-local
+	// Upstream decides which reactions are shown and their order; this only moves remote ones behind local ones.
+	if (prefer.s.separateRemoteReactions) {
+		newReactions = [
+			...newReactions.filter(([x]) => !isRemoteCustomEmojiReaction(x)),
+			...newReactions.filter(([x]) => isRemoteCustomEmojiReaction(x)),
+		];
+	}
+
 	_reactions.value = newReactions;
 }, { immediate: true, deep: true });
 </script>
@@ -150,6 +173,23 @@ watch([() => props.reactions, () => props.maxNumber], ([newSource, maxNumber]) =
 
 	&:empty {
 		display: none;
+	}
+}
+
+// kyunet: feat/remote-reaction-to-local
+.firstRemote {
+	position: relative;
+	margin-left: 9px;
+
+	&::before {
+		content: '';
+		position: absolute;
+		left: -7px;
+		top: 50%;
+		width: 1px;
+		height: 20px;
+		transform: translateY(-50%);
+		background: var(--MI_THEME-divider);
 	}
 }
 </style>

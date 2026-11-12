@@ -2,9 +2,9 @@
  * SPDX-FileCopyrightText: syuilo and misskey-project
  * SPDX-License-Identifier: AGPL-3.0-only
  */
-// kyunet: Fork-only LLM translation service (spec 5.2 / 5.4). Resolves references to source text,
-// consults the script gate and the hash cache, batches cache misses into LLM calls behind a Redis
-// semaphore, and stores results. Also owns cache cleanup and the admin test / stats helpers.
+// kyunet: feat/llm-translation - feat/translation-inflight-lock
+// Fork-only LLM translation service (spec 5.2 / 5.4): resolve refs, gate, hash cache, Redis semaphore + per-hash
+// in-flight lock, LLM batches, cache cleanup and admin helpers.
 
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
@@ -15,6 +15,8 @@ import type { Config } from '@/config.js';
 import type { DriveFilesRepository, KyunetTranslationsRepository, NotesRepository, PollsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
 import type { MiNote } from '@/models/Note.js';
 import { buildNoteTranslationSource } from '@/misc/kyunet-note-source.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { KyunetImageLoader } from '@/core/KyunetImageLoader.js';
 import type { MiKyunetTranslation } from '@/models/KyunetTranslation.js';
 import { kyunetTranslationProviders } from '@/models/KyunetTranslationSetting.js';
 import type { MiKyunetTranslationSetting, KyunetTranslationProvider } from '@/models/KyunetTranslationSetting.js';
@@ -30,6 +32,8 @@ import { KyunetTranslationDeeplClient } from '@/core/KyunetTranslationDeeplClien
 import type { KyunetLlmErrorReason, LlmInputItem, LlmOutputItem, TranslationKind } from '@/core/KyunetTranslationLlmClient.js';
 import { splitForTranslation } from '@/misc/kyunet-translation-split.js';
 import type { TextPiece } from '@/misc/kyunet-translation-split.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import type { LlmImageInput } from '@/core/KyunetTranslationLlmClient.js';
 import { isObviouslyTargetLang, primaryLang } from '@/misc/kyunet-script-gate.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
 
@@ -59,7 +63,14 @@ export type ClearCacheFilter =
 	| { noteId: string };
 
 type Resolved = { ok: true; kind: TranslationKind; text: string } | { ok: false };
-type WorkUnit = { hash: string; kind: TranslationKind; text: string; indices: number[] };
+type WorkUnit = {
+	hash: string;
+	kind: TranslationKind;
+	text: string;
+	indices: number[];
+	/** this request owns the in-flight lock for the hash and must release it after the cache write */
+	locked: boolean;
+};
 // arti: a piece of a work unit (the whole text, or one piece of a long text)
 type Part = { unitHash: string; k: number; kind: TranslationKind; text: string };
 type PartOut = { out: LlmOutputItem; provider: KyunetTranslationProvider } | null;
@@ -77,10 +88,20 @@ function frozenEmptyResult(status: 'unavailable' | 'failed'): TranslationResult 
 const UNAVAILABLE = frozenEmptyResult('unavailable');
 const FAILED = frozenEmptyResult('failed');
 
+// kyunet: feat/llm-translation - feat/image-translation
+type LlmLimits = { timeoutMs: number; maxConcurrency: number };
+
 const SEMAPHORE_POLL_MS = 250;
 const SEMAPHORE_MAX_WAIT_MS = 10000;
+// per-hash in-flight lock; design and numbers in FORK-SPEC.md § LLM 번역 진행 중 락
+const INFLIGHT_POLL_MS = 250;
+const INFLIGHT_LOCK_MARGIN_MS = 2000;
 const STAT_FIELDS = ['gateSkipped', 'cacheHits', 'llmItems', 'llmCalls', 'llmFailures'] as const;
 type StatField = typeof STAT_FIELDS[number];
+
+function stripWhitespace(text: string): string {
+	return text.replace(/\s+/g, '');
+}
 
 // global setTimeout on purpose: vitest fake timers patch it, but not node:timers/promises
 function sleep(ms: number): Promise<void> {
@@ -122,6 +143,9 @@ export class KyunetTranslationService {
 		private noteEntityService: NoteEntityService,
 		private idService: IdService,
 		private loggerService: LoggerService,
+
+		// kyunet: feat/llm-translation - feat/image-translation
+		private imageLoader: KyunetImageLoader,
 	) {
 		this.logger = this.loggerService.getLogger('kyunet-translation');
 	}
@@ -132,6 +156,10 @@ export class KyunetTranslationService {
 
 	private get statsKey(): string {
 		return `${this.config.redis.prefix}:kyunet:translation:stats`;
+	}
+
+	private inflightKey(langKey: string, hash: string): string {
+		return `${this.config.redis.prefix}:kyunet:translation:inflight:${langKey}:${hash}`;
 	}
 
 	@bindThis
@@ -163,7 +191,33 @@ export class KyunetTranslationService {
 		return buildNoteTranslationSource(note, poll?.choices ?? [], comments);
 	}
 
+	// kyunet: feat/llm-translation - feat/image-translation
+	@bindThis
+	public hashForImage(md5: string): string {
+		return createHash('sha256').update(`image\n${md5}`).digest('hex');
+	}
+
 	//#region resolvers
+	// kyunet: feat/llm-translation - feat/image-translation
+	// shared by the note text and image paths
+	private async findVisibleNote(noteId: string, me: MiLocalUser): Promise<MiNote | null> {
+		const note = await this.notesRepository.findOne({ where: { id: noteId }, relations: { user: true } });
+		if (note?.user == null) return null;
+		if (!(await this.noteEntityService.isVisibleForMe(note, me.id))) return null;
+		// Mirrors NoteEntityService.shouldHideNote for an authenticated requester: keep in sync with it.
+		// Why not pack(): FORK-SPEC.md § LLM 번역.
+		if (me.id !== note.userId) {
+			const createdAt = this.idService.parse(note.id).date; // same source as the packed note's createdAt
+			if (shouldHideNoteByTime(note.user.makeNotesHiddenBefore, createdAt)) return null;
+			if (
+				(note.visibility === 'public' || note.visibility === 'home')
+				&& shouldHideNoteByTime(note.user.makeNotesFollowersOnlyBefore, createdAt)
+				&& !(await this.noteEntityService.isVisibleForMe({ ...note, visibility: 'followers' }, me.id))
+			) return null;
+		}
+		return note;
+	}
+
 	private async resolve(ref: TranslationItemRef, me: MiLocalUser, setting: MiKyunetTranslationSetting): Promise<Resolved> {
 		const raw = await this.resolveRaw(ref, me);
 		if (raw == null) return { ok: false };
@@ -175,21 +229,9 @@ export class KyunetTranslationService {
 	private async resolveRaw(ref: TranslationItemRef, me: MiLocalUser): Promise<{ kind: TranslationKind; text: string } | null> {
 		switch (ref.type) {
 			case 'note': {
-				const note = await this.notesRepository.findOne({ where: { id: ref.id }, relations: { user: true } });
-				if (note?.user == null) return null;
-				if (!(await this.noteEntityService.isVisibleForMe(note, me.id))) return null;
-				// Mirrors NoteEntityService.shouldHideNote for an authenticated requester (keep in sync with it).
-				// A full pack() per item was too expensive; requireSigninToViewContents / ugcVisibilityForVisitor only
-				// apply to anonymous requesters, and this endpoint requires credentials.
-				if (me.id !== note.userId) {
-					const createdAt = this.idService.parse(note.id).date; // same source as the packed note's createdAt
-					if (shouldHideNoteByTime(note.user.makeNotesHiddenBefore, createdAt)) return null;
-					if (
-						(note.visibility === 'public' || note.visibility === 'home')
-						&& shouldHideNoteByTime(note.user.makeNotesFollowersOnlyBefore, createdAt)
-						&& !(await this.noteEntityService.isVisibleForMe({ ...note, visibility: 'followers' }, me.id))
-					) return null;
-				}
+				// kyunet: feat/llm-translation - feat/image-translation
+				const note = await this.findVisibleNote(ref.id, me);
+				if (note == null) return null;
 				return { kind: 'note', text: await this.noteSource(note) };
 			}
 			case 'user_name': {
@@ -217,26 +259,72 @@ export class KyunetTranslationService {
 	//#endregion
 
 	//#region semaphore / stats
-	private async acquire(setting: MiKyunetTranslationSetting): Promise<boolean> {
+	// kyunet: feat/llm-translation - feat/image-translation
+	// takes limits + key so the image path can use its own counter (see KyunetLlmConnection.semaphoreScope)
+	private async acquire(setting: LlmLimits, key = this.semaphoreKey): Promise<boolean> {
 		const deadline = Date.now() + Math.min(setting.timeoutMs, SEMAPHORE_MAX_WAIT_MS);
 		for (;;) {
-			const n = await this.redisClient.incr(this.semaphoreKey);
+			const n = await this.redisClient.incr(key);
 			if (n === 1) {
 				// first holder sets the TTL; later holders do not refresh it so a leaked count eventually expires
-				await this.redisClient.expire(this.semaphoreKey, Math.ceil((setting.timeoutMs * 2) / 1000));
+				await this.redisClient.expire(key, Math.ceil((setting.timeoutMs * 2) / 1000));
 			}
 			if (n <= setting.maxConcurrency) return true;
-			await this.redisClient.decr(this.semaphoreKey);
+			await this.redisClient.decr(key);
 			if (Date.now() >= deadline) return false;
 			await sleep(SEMAPHORE_POLL_MS);
 		}
 	}
 
-	private async release(): Promise<void> {
-		const n = await this.redisClient.decr(this.semaphoreKey);
+	// kyunet: feat/llm-translation - feat/image-translation
+	private async release(key = this.semaphoreKey): Promise<void> {
+		const n = await this.redisClient.decr(key);
 		if (n < 0) {
 			// the key expired while we were running: reset instead of leaving a negative floor
-			await this.redisClient.del(this.semaphoreKey);
+			await this.redisClient.del(key);
+		}
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	private inflightTtlMs(setting: Pick<LlmLimits, 'timeoutMs'>): number {
+		return setting.timeoutMs + SEMAPHORE_MAX_WAIT_MS + INFLIGHT_LOCK_MARGIN_MS;
+	}
+
+	/** 'unknown' = Redis failed; the caller translates without a lock. */
+	private async tryLockInflight(setting: Pick<LlmLimits, 'timeoutMs'>, langKey: string, hash: string): Promise<'owned' | 'held' | 'unknown'> {
+		try {
+			const r = await this.redisClient.set(this.inflightKey(langKey, hash), '1', 'PX', this.inflightTtlMs(setting), 'NX');
+			return r === 'OK' ? 'owned' : 'held';
+		} catch (err) {
+			this.logger.warn(`in-flight lock failed; translating without it: ${err instanceof Error ? err.message : String(err)}`);
+			return 'unknown';
+		}
+	}
+
+	/** Resolves when the lock is gone; the deadline is only a guard in case the key outlives its TTL. */
+	private async waitInflight(setting: Pick<LlmLimits, 'timeoutMs'>, langKey: string, hash: string): Promise<void> {
+		const deadline = Date.now() + this.inflightTtlMs(setting) + INFLIGHT_LOCK_MARGIN_MS;
+		const key = this.inflightKey(langKey, hash);
+		for (;;) {
+			try {
+				if ((await this.redisClient.exists(key)) === 0) return;
+			} catch (err) {
+				this.logger.warn(`in-flight lock poll failed; translating without it: ${err instanceof Error ? err.message : String(err)}`);
+				return;
+			}
+			if (Date.now() >= deadline) return;
+			await sleep(INFLIGHT_POLL_MS);
+		}
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	private async unlockInflight(langKey: string, units: Pick<WorkUnit, 'hash' | 'locked'>[]): Promise<void> {
+		const keys = units.filter(u => u.locked).map(u => this.inflightKey(langKey, u.hash));
+		if (keys.length === 0) return;
+		try {
+			await this.redisClient.del(...keys);
+		} catch (err) {
+			this.logger.warn(`in-flight unlock failed: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	}
 
@@ -289,46 +377,179 @@ export class KyunetTranslationService {
 			}
 			const unit = work.get(p.hash);
 			if (unit) unit.indices.push(p.index);
-			else work.set(p.hash, { hash: p.hash, kind: p.kind, text: p.text, indices: [p.index] });
+			else work.set(p.hash, { hash: p.hash, kind: p.kind, text: p.text, indices: [p.index], locked: false });
 		}
 		if (cacheHits > 0) this.incrStat('cacheHits', cacheHits);
 		if (work.size === 0) return results;
 
-		// 5. split long texts (arti), batch, 6-9. run
-		const plans = [...work.values()].map(unit => ({ unit, pieces: this.piecesFor(unit, setting) }));
-		const parts: Part[] = plans.flatMap(({ unit, pieces }) => pieces.map((piece, k) => ({ unitHash: unit.hash, k, kind: unit.kind, text: piece.text })));
-		const outputs = new Map<Part, PartOut>();
-		const batches = this.chunk(parts, setting);
-		await Promise.all(batches.map(async batch => {
-			const outs = await this.runBatch(batch, setting, targetLang);
-			batch.forEach((part, j) => outputs.set(part, outs[j]));
+		// 5. in-flight lock (kyunet): owned units go to the LLM now, held units wait for the other holder's row. force never waits.
+		const units = [...work.values()];
+		const owned: WorkUnit[] = [];
+		const waiting: WorkUnit[] = [];
+		await Promise.all(units.map(async unit => {
+			const lock = await this.tryLockInflight(setting, langKey, unit.hash);
+			unit.locked = lock === 'owned';
+			if (lock === 'held' && !force) waiting.push(unit);
+			else owned.push(unit);
 		}));
 
-		// 7-9. glue the pieces back, fill results, store
-		const rows: MiKyunetTranslation[] = [];
-		for (const { unit, pieces } of plans) {
-			const partOuts = parts.filter(part => part.unitHash === unit.hash).map(part => outputs.get(part) ?? null);
-			if (partOuts.some(o => o == null)) {
-				for (const idx of unit.indices) results[idx] = FAILED;
-				continue;
-			}
-			const done = partOuts as NonNullable<PartOut>[];
-			const merged = this.mergePieces(pieces, done);
-			const translated = this.postProcess(merged, unit.text);
-			const providers = new Set(done.map(o => o.provider));
-			const model = [...providers].map(p => p === 'deepl' ? 'deepl' : (setting.model ?? '')).join('+');
-			const provider = providers.size > 1 ? 'mixed' : (providers.has('deepl') ? 'deepl' : 'llm');
-			rows.push({ contentHash: unit.hash, targetLang: langKey, text: translated, sourceLangs: merged.sourceLangs, provider, model, createdAt: new Date() });
-			for (const idx of unit.indices) results[idx] = { status: 'ok', text: translated, sourceLangs: merged.sourceLangs };
+		// 6. split long texts (arti), batch, 7-10. run
+		await Promise.all([
+			this.runUnits(owned, setting, targetLang, langKey, force, results),
+			this.runAfterWait(waiting, setting, langKey, results),
+		]);
+		return results;
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	/** One image of a note the requester can see. Same cache table, in-flight lock and stats as the text path. */
+	@bindThis
+	public async translateImage(fileId: string, noteId: string, targetLang: string, me: MiLocalUser, opts: { force?: boolean } = {}): Promise<TranslationResult> {
+		const force = opts.force ?? false;
+		const langKey = targetLang.toLowerCase();
+
+		const note = await this.findVisibleNote(noteId, me);
+		if (note == null || !note.fileIds.includes(fileId)) return UNAVAILABLE;
+		const file = await this.driveFilesRepository.findOneBy({ id: fileId });
+		if (file == null || !file.type.startsWith('image/')) return UNAVAILABLE;
+		const hash = this.hashForImage(file.md5);
+		const conn = this.settingService.getImageConnection();
+
+		const readCache = async (): Promise<TranslationResult | null> => {
+			const hit = await this.translationsRepository.findOneBy({ contentHash: hash, targetLang: langKey });
+			if (hit == null) return null;
+			this.incrStat('cacheHits');
+			return { status: 'ok', text: hit.text, sourceLangs: hit.sourceLangs };
+		};
+
+		if (!force) {
+			const cached = await readCache();
+			if (cached != null) return cached;
 		}
 
-		// a failed cache write only loses the cache entry; the translations are already in `results`
-		try {
-			await this.upsert(rows, force);
-		} catch (err) {
-			this.logger.warn(`storing translations failed: ${err instanceof Error ? err.message : String(err)}`);
+		const lock = await this.tryLockInflight(conn, langKey, hash);
+		if (lock === 'held' && !force) {
+			await this.waitInflight(conn, langKey, hash);
+			return (await readCache().catch(() => null)) ?? FAILED;
 		}
-		return results;
+
+		// Download and resize before taking an LLM slot: a slow remote file must not hold a slot the text path shares.
+		let image: LlmImageInput;
+		try {
+			image = await this.imageLoader.load(file);
+		} catch (err) {
+			this.logger.warn(`loading image ${fileId} failed: ${err instanceof Error ? err.message : String(err)}`);
+			await this.unlockInflight(langKey, [{ hash, locked: lock === 'owned' }]);
+			return FAILED;
+		}
+
+		const semKey = conn.semaphoreScope === 'image' ? `${this.semaphoreKey}:image` : this.semaphoreKey;
+		let acquired = false;
+		let row: MiKyunetTranslation | null = null;
+		let result: TranslationResult = FAILED;
+		try {
+			acquired = await this.acquire(conn, semKey);
+			if (!acquired) {
+				this.logger.warn('semaphore wait exceeded; image translation failed without an LLM call');
+			} else {
+				this.incrStat('llmItems');
+				this.incrStat('llmCalls');
+				const { result: out } = await this.llmClient.completeImage(conn, targetLang, image);
+				const text = this.normalizeText(out.text) === '' ? null : out.text;
+				row = { contentHash: hash, targetLang: langKey, text, sourceLangs: out.sourceLangs, provider: 'llm', model: conn.model ?? '', createdAt: new Date() };
+				result = { status: 'ok', text, sourceLangs: out.sourceLangs };
+			}
+		} catch (err) {
+			if (acquired) this.incrStat('llmFailures');
+			const reason = err instanceof KyunetLlmError ? err.reason : 'unknown';
+			this.logger.warn(`image translation of ${fileId} failed (${reason}): ${err instanceof Error ? err.message : String(err)}`);
+		} finally {
+			if (acquired) {
+				try {
+					await this.release(semKey);
+				} catch (err) {
+					this.logger.warn(`semaphore release failed: ${err instanceof Error ? err.message : String(err)}`);
+				}
+			}
+		}
+
+		if (row != null) {
+			try {
+				await this.upsert([row], force);
+			} catch (err) {
+				this.logger.warn(`storing image translation failed: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+		await this.unlockInflight(langKey, [{ hash, locked: lock === 'owned' }]);
+		return result;
+	}
+
+	/** arti: owned units: split long texts, batch, run, glue back, store, then release the in-flight lock. */
+	private async runUnits(units: WorkUnit[], setting: MiKyunetTranslationSetting, targetLang: string, langKey: string, force: boolean, results: TranslationResult[]): Promise<void> {
+		if (units.length === 0) return;
+		try {
+			const plans = units.map(unit => ({ unit, pieces: this.piecesFor(unit, setting) }));
+			const parts: Part[] = plans.flatMap(({ unit, pieces }) => pieces.map((piece, k) => ({ unitHash: unit.hash, k, kind: unit.kind, text: piece.text })));
+			const outputs = new Map<Part, PartOut>();
+			const batches = this.chunk(parts, setting);
+			await Promise.all(batches.map(async batch => {
+				const outs = await this.runBatch(batch, setting, targetLang);
+				batch.forEach((part, j) => outputs.set(part, outs[j]));
+			}));
+
+			// 7-9. glue the pieces back, fill results, store
+			const rows: MiKyunetTranslation[] = [];
+			for (const { unit, pieces } of plans) {
+				const partOuts = parts.filter(part => part.unitHash === unit.hash).map(part => outputs.get(part) ?? null);
+				if (partOuts.some(o => o == null)) {
+					for (const idx of unit.indices) results[idx] = FAILED;
+					continue;
+				}
+				const done = partOuts as NonNullable<PartOut>[];
+				const merged = this.mergePieces(pieces, done);
+				const translated = this.postProcess(merged, unit.text);
+				const providers = new Set(done.map(o => o.provider));
+				const model = [...providers].map(p => p === 'deepl' ? 'deepl' : (setting.model ?? '')).join('+');
+				const provider = providers.size > 1 ? 'mixed' : (providers.has('deepl') ? 'deepl' : 'llm');
+				rows.push({ contentHash: unit.hash, targetLang: langKey, text: translated, sourceLangs: merged.sourceLangs, provider, model, createdAt: new Date() });
+				for (const idx of unit.indices) results[idx] = { status: 'ok', text: translated, sourceLangs: merged.sourceLangs };
+			}
+
+			// a failed cache write only loses the cache entry; the translations are already in `results`
+			try {
+				await this.upsert(rows, force);
+			} catch (err) {
+				this.logger.warn(`storing translations failed: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		} finally {
+			// must come after the upsert: a waiter re-reads the cache the moment the lock is gone
+			await this.unlockInflight(langKey, units);
+		}
+	}
+
+	/** Waits for the other holder of each unit, then serves its row; a unit still missing afterwards is 'failed' (no retry here). */
+	private async runAfterWait(units: WorkUnit[], setting: MiKyunetTranslationSetting, langKey: string, results: TranslationResult[]): Promise<void> {
+		if (units.length === 0) return;
+		await Promise.all(units.map(unit => this.waitInflight(setting, langKey, unit.hash)));
+
+		let rows: MiKyunetTranslation[] = [];
+		try {
+			rows = await this.translationsRepository.findBy({ contentHash: In(units.map(u => u.hash)), targetLang: langKey });
+		} catch (err) {
+			this.logger.warn(`cache re-read after in-flight wait failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
+		const rowMap = new Map(rows.map(row => [row.contentHash, row]));
+		let hits = 0;
+		for (const unit of units) {
+			const hit = rowMap.get(unit.hash);
+			if (hit != null) {
+				hits++;
+				for (const idx of unit.indices) results[idx] = { status: 'ok', text: hit.text, sourceLangs: hit.sourceLangs };
+			} else {
+				for (const idx of unit.indices) results[idx] = FAILED;
+			}
+		}
+		if (hits > 0) this.incrStat('cacheHits', hits);
 	}
 
 	/** arti: long texts are translated in pieces by the LLM provider so one item cannot blow the token budget. */
@@ -340,13 +561,13 @@ export class KyunetTranslationService {
 	/** arti: pieces that need no translation keep their original text. */
 	private mergePieces(pieces: TextPiece[], outs: NonNullable<PartOut>[]): LlmOutputItem {
 		const sourceLangs = [...new Set(outs.flatMap(o => o.out.sourceLangs))];
-		const translatedAny = outs.some(o => o.out.needsTranslation && o.out.text !== '');
-		if (!translatedAny) return { i: 0, needsTranslation: false, sourceLangs, text: '' };
+		const translatedAny = outs.some(o => o.out.text !== '');
+		if (!translatedAny) return { i: 0, sourceLangs, text: '' };
 		const text = pieces.map((piece, k) => {
 			const out = outs[k].out;
-			return (out.needsTranslation && out.text !== '' ? out.text : piece.text) + piece.sep;
+			return (out.text !== '' ? out.text : piece.text) + piece.sep;
 		}).join('');
-		return { i: 0, needsTranslation: true, sourceLangs, text };
+		return { i: 0, sourceLangs, text };
 	}
 
 	private chunk<T extends { text: string }>(units: T[], setting: MiKyunetTranslationSetting): T[][] {
@@ -434,11 +655,15 @@ export class KyunetTranslationService {
 		return input.map(item => done.get(item.i) ?? null);
 	}
 
-	/** spec 5.2 step 8 + 5.3: needsTranslation=false, empty text, or text identical to the source all mean "nothing to translate". */
+	/**
+	 * Empty text or text that equals the source up to whitespace means "nothing to translate".
+	 * The text alone decides; the model's sourceLangs is not trusted for this (it labels an untouched
+	 * Korean source as 'ja' and re-spaces it rather than admit there was nothing to do).
+	 */
 	private postProcess(out: LlmOutputItem, source: string): string | null {
-		if (!out.needsTranslation) return null;
-		if (out.text === '') return null;
-		if (this.normalizeText(out.text) === source) return null;
+		const text = this.normalizeText(out.text);
+		if (text === '') return null;
+		if (stripWhitespace(text) === stripWhitespace(source)) return null;
 		return out.text;
 	}
 
@@ -453,12 +678,32 @@ export class KyunetTranslationService {
 	}
 
 	@bindThis
-	public async testTranslate(text: string, targetLang: string): Promise<{ ok: boolean; latencyMs: number; result?: LlmOutputItem; error?: string; raw?: unknown }> {
+	public async testTranslate(text: string, targetLang: string): Promise<{ ok: boolean; latencyMs: number; result?: { text: string | null; sourceLangs: string[] }; error?: string; raw?: unknown }> {
 		const setting = this.settingService.get();
 		const started = Date.now();
 		try {
-			const { items, raw, latencyMs } = await this.complete(setting, setting.provider, targetLang, [{ i: 0, kind: 'note', text: this.normalizeText(text) }]);
-			return { ok: true, latencyMs, result: items[0], raw };
+			const source = this.normalizeText(text);
+			const { items, raw, latencyMs } = await this.complete(setting, setting.provider, targetLang, [{ i: 0, kind: 'note', text: source }]);
+			// same verdict the real path stores: text null = nothing to translate
+			return { ok: true, latencyMs, result: { text: this.postProcess(items[0], source), sourceLangs: items[0].sourceLangs }, raw };
+		} catch (err) {
+			const reason = err instanceof KyunetLlmError ? `${err.reason}: ${err.message}` : (err instanceof Error ? err.message : String(err));
+			return { ok: false, latencyMs: Date.now() - started, error: reason };
+		}
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	/** Admin check of the image path: any drive file, no note check, nothing cached. */
+	@bindThis
+	public async testImage(fileId: string, targetLang: string): Promise<{ ok: boolean; latencyMs: number; result?: { text: string | null; sourceLangs: string[] }; error?: string; raw?: unknown }> {
+		const started = Date.now();
+		try {
+			const file = await this.driveFilesRepository.findOneBy({ id: fileId });
+			if (file == null || !file.type.startsWith('image/')) throw new Error('no such image file');
+			const image = await this.imageLoader.load(file);
+			const { result, raw, latencyMs } = await this.llmClient.completeImage(this.settingService.getImageConnection(), targetLang, image);
+			const text = this.normalizeText(result.text) === '' ? null : result.text;
+			return { ok: true, latencyMs, result: { text, sourceLangs: result.sourceLangs }, raw };
 		} catch (err) {
 			const reason = err instanceof KyunetLlmError ? `${err.reason}: ${err.message}` : (err instanceof Error ? err.message : String(err));
 			return { ok: false, latencyMs: Date.now() - started, error: reason };
@@ -483,7 +728,11 @@ export class KyunetTranslationService {
 		if (note == null) throw new Error('no such note');
 		const text = await this.noteSource(note);
 		const res = await this.translationsRepository.delete({ contentHash: In(kyunetTranslationProviders.map(provider => this.hashFor('note', text, provider))) });
-		return res.affected ?? 0;
+		// kyunet: feat/llm-translation - feat/image-translation
+		const images = note.fileIds.length === 0 ? [] : (await this.driveFilesRepository.findBy({ id: In(note.fileIds) })).filter(f => f.type.startsWith('image/'));
+		if (images.length === 0) return res.affected ?? 0;
+		const imageRes = await this.translationsRepository.delete({ contentHash: In(images.map(f => this.hashForImage(f.md5))) });
+		return (res.affected ?? 0) + (imageRes.affected ?? 0);
 	}
 
 	/** Called from CleanProcessorService. */

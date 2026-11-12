@@ -13,12 +13,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 	@contextmenu.prevent.stop="menu"
 >
 	<MkReactionIcon style="pointer-events: none;" :class="prefer.s.limitWidthOfReaction ? $style.limitWidth : ''" :reaction="reaction" :emojiUrl="reactionEmojis[emojiName]"/>
-	<span :class="$style.count">{{ count }}</span>
+	<!-- kyunet: feat/remote-reaction-to-local -->
+	<MkLoading v-if="resolving" :em="true" :inline="true" :class="$style.count"/>
+	<span v-else :class="$style.count">{{ count }}</span>
 </button>
 </template>
 
 <script lang="ts" setup>
-import { computed, inject, onMounted, useTemplateRef, watch } from 'vue';
+import { computed, inject, onMounted, ref, useTemplateRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import { getUnicodeEmojiOrNull } from '@@/js/emojilist.js';
 import { getEmojiNameFromReaction, isLocalCustomEmojiReaction } from '@@/js/emoji-name.js';
@@ -41,6 +43,8 @@ import { noteEvents } from '@/composables/use-note-capture.js';
 import { mute as muteEmoji, unmute as unmuteEmoji, checkMuted as isEmojiMuted } from '@/utility/emoji-mute.js';
 import { addToEmojiPalette } from '@/utility/emoji-palette.js';
 import { haptic } from '@/utility/haptic.js';
+// kyunet: feat/remote-reaction-to-local
+import { getLocalCounterpartReaction, resolveRemoteReactionToLocal } from '@/utility/kyunet-remote-reaction-match.js';
 
 const props = defineProps<{
 	noteId: Misskey.entities.Note['id'];
@@ -63,12 +67,18 @@ const emojiName = computed(() => getEmojiNameFromReaction(props.reaction));
 
 const isLocalCustomEmoji = computed(() => isLocalCustomEmojiReaction(props.reaction));
 
+// kyunet: feat/remote-reaction-to-local
+// A remote custom emoji is clickable when a local emoji of the same name exists; the image is compared on click.
+const localCounterpart = computed(() => getLocalCounterpartReaction(props.reaction));
+const resolving = ref(false);
+
 const canToggle = computed(() => {
 	const emoji = isLocalCustomEmoji.value ? customEmojisMap.get(emojiName.value) : getUnicodeEmojiOrNull(props.reaction);
 
 	// TODO
 	//return $i != null && emoji != null && checkReactionPermissions($i, props.note, emoji);
-	return $i != null && emoji != null;
+	// kyunet: feat/remote-reaction-to-local
+	return $i != null && (emoji != null || localCounterpart.value != null);
 });
 
 async function toggleReaction() {
@@ -77,15 +87,32 @@ async function toggleReaction() {
 
 	const me = $i;
 
+	// kyunet: feat/remote-reaction-to-local
+	// `reaction` is what gets sent; it differs from props.reaction only for a verified remote emoji.
+	let reaction = props.reaction;
+	if (localCounterpart.value != null) {
+		if (resolving.value) return;
+		resolving.value = true;
+		const resolved = await resolveRemoteReactionToLocal(props.reaction, props.reactionEmojis[emojiName.value]).finally(() => {
+			resolving.value = false;
+		});
+		if (resolved == null) {
+			os.toast(i18n.ts.remoteReactionImageMismatch);
+			return;
+		}
+		reaction = resolved;
+	}
+	const reactionEmojiName = getEmojiNameFromReaction(reaction);
+
 	const oldReaction = props.myReaction;
 	if (oldReaction) {
 		const confirm = await os.confirm({
 			type: 'warning',
-			text: oldReaction !== props.reaction ? i18n.ts.changeReactionConfirm : i18n.ts.cancelReactionConfirm,
+			text: oldReaction !== reaction ? i18n.ts.changeReactionConfirm : i18n.ts.cancelReactionConfirm,
 		});
 		if (confirm.canceled) return;
 
-		if (oldReaction !== props.reaction) {
+		if (oldReaction !== reaction) {
 			sound.playMisskeySfx('reaction');
 			haptic();
 		}
@@ -102,18 +129,18 @@ async function toggleReaction() {
 				userId: me.id,
 				reaction: oldReaction,
 			});
-			if (oldReaction !== props.reaction) {
+			if (oldReaction !== reaction) {
 				misskeyApi('notes/reactions/create', {
 					noteId: props.noteId,
-					reaction: props.reaction,
+					reaction: reaction,
 				}).then(() => {
-					const emoji = customEmojisMap.get(emojiName.value);
-					if (emoji == null && getUnicodeEmojiOrNull(props.reaction) == null) {
+					const emoji = customEmojisMap.get(reactionEmojiName);
+					if (emoji == null && getUnicodeEmojiOrNull(reaction) == null) {
 						return;
 					}
 					noteEvents.emit(`reacted:${props.noteId}`, {
 						userId: me.id,
-						reaction: props.reaction,
+						reaction: reaction,
 						emoji: emoji,
 					});
 				});
@@ -123,7 +150,7 @@ async function toggleReaction() {
 		if (prefer.s.confirmOnReact) {
 			const confirm = await os.confirm({
 				type: 'question',
-				text: i18n.tsx.reactAreYouSure({ emoji: props.reaction.replace('@.', '') }),
+				text: i18n.tsx.reactAreYouSure({ emoji: reaction.replace('@.', '') }),
 			});
 
 			if (confirm.canceled) return;
@@ -139,16 +166,16 @@ async function toggleReaction() {
 
 		misskeyApi('notes/reactions/create', {
 			noteId: props.noteId,
-			reaction: props.reaction,
+			reaction: reaction,
 		}).then(() => {
-			const emoji = customEmojisMap.get(emojiName.value);
-			if (emoji == null && getUnicodeEmojiOrNull(props.reaction) == null) {
+			const emoji = customEmojisMap.get(reactionEmojiName);
+			if (emoji == null && getUnicodeEmojiOrNull(reaction) == null) {
 				return;
 			}
 
 			noteEvents.emit(`reacted:${props.noteId}`, {
 				userId: me.id,
-				reaction: props.reaction,
+				reaction: reaction,
 				emoji: emoji,
 			});
 		});

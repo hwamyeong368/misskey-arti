@@ -28,15 +28,33 @@ export function kyunetTargetLang(): string {
 	return miLocalStorage.getItem('lang') ?? navigator.language;
 }
 
-/** "en, ja" → "영어, 일본어" in the UI language; unknown or unsupported codes fall back to the code itself. */
+/**
+ * Drops the region from a BCP 47 tag ("ja-JP" → "ja") but keeps the script ("zh-Hant" stays): the model
+ * often answers with region-qualified tags, and Intl would render those as "일본어(일본)". Returns the
+ * input unchanged when it is not a valid tag.
+ */
+function stripRegion(code: string): string {
+	try {
+		const locale = new Intl.Locale(code);
+		return locale.script != null ? `${locale.language}-${locale.script}` : locale.language;
+	} catch {
+		return code;
+	}
+}
+
+/**
+ * "en, ja-JP" → "영어, 일본어" in the UI language; unknown or unsupported codes fall back to the code itself.
+ * No codes at all reads as "unknown", like upstream's translator does when it cannot detect the language.
+ */
 export function kyunetLangNames(codes: readonly string[]): string {
+	if (codes.length === 0) return i18n.ts.unknown;
 	let names: Intl.DisplayNames | null = null;
 	try {
 		names = new Intl.DisplayNames([kyunetTargetLang()], { type: 'language', fallback: 'none' });
 	} catch {
 		names = null;
 	}
-	return codes.map(code => {
+	return [...new Set(codes.map(stripRegion))].map(code => {
 		try {
 			return names?.of(code) ?? code;
 		} catch {
@@ -53,7 +71,9 @@ export function useKyunetTranslation(): {
 	available: ComputedRef<boolean>;
 	targetLang: string;
 	request: (ref: KyunetTranslationRef) => Ref<KyunetTranslationResult | null>;
+	peek: (ref: KyunetTranslationRef) => KyunetTranslationResult | null;
 	translateNow: (ref: KyunetTranslationRef) => Promise<KyunetTranslationResult>;
+	translateManyNow: (refs: KyunetTranslationRef[]) => Promise<KyunetTranslationResult[]>;
 } {
 	const targetLang = kyunetTargetLang();
 	const available = computed(() => isKyunetTranslationAvailable());
@@ -61,7 +81,9 @@ export function useKyunetTranslation(): {
 		available,
 		targetLang,
 		request: (ref) => available.value ? queue.request(ref, targetLang) : nullRef(),
+		peek: (ref) => queue.peek(ref, targetLang),
 		translateNow: (ref) => queue.translateNow(ref, targetLang),
+		translateManyNow: (refs) => queue.translateManyNow(refs, targetLang),
 	};
 }
 
@@ -90,6 +112,7 @@ export async function translateNoteWith(
 	translation: Ref<Misskey.entities.NotesTranslateResponse | null>,
 	translating: Ref<boolean>,
 ): Promise<void> {
+	if (translating.value) return; // a second click while a forced call is pending would send it again
 	if (translation.value != null) {
 		translation.value = null;
 		return;

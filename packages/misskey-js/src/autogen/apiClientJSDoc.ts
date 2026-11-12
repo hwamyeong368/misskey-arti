@@ -630,6 +630,17 @@ declare module '../api.js' {
      * 
      * **Credential required**: *Yes* / **Permission**: *write:admin:meta*
      */
+    request<E extends 'admin/kyunet/translation/test-image', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *write:admin:meta*
+     */
     request<E extends 'admin/kyunet/translation/update', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
@@ -3831,6 +3842,17 @@ declare module '../api.js' {
      * **Credential required**: *Yes* / **Permission**: *read:account*
      */
     request<E extends 'kyunet/translate', P extends Endpoints[E]['req']>(
+      endpoint: E,
+      params: P,
+      credential?: string | null,
+    ): Promise<SwitchCaseResponseType<E, P>>;
+
+    /**
+     * No description provided.
+     * 
+     * **Credential required**: *Yes* / **Permission**: *read:account*
+     */
+    request<E extends 'kyunet/translate-image', P extends Endpoints[E]['req']>(
       endpoint: E,
       params: P,
       credential?: string | null,

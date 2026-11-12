@@ -230,7 +230,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 									</MkPreferenceContainer>
 								</SearchMarker>
 
-								<!-- kyunet: fork-only LLM translation toggles -->
+								<!-- kyunet: feat/remote-reaction-to-local -->
+								<SearchMarker :keywords="['reaction', 'remote', 'separate', 'divider']">
+									<MkPreferenceContainer k="separateRemoteReactions">
+										<MkSwitch v-model="separateRemoteReactions">
+											<template #label><SearchLabel>{{ i18n.ts.separateRemoteReactions }}</SearchLabel></template>
+											<template #caption>{{ i18n.ts.separateRemoteReactions_description }}</template>
+										</MkSwitch>
+									</MkPreferenceContainer>
+								</SearchMarker>
+
+								<!-- kyunet: feat/llm-translation -->
 								<SearchMarker :keywords="['translate', 'translation', 'llm']">
 									<MkFolder>
 										<template #label><SearchLabel>{{ i18n.ts._kyunetTranslation.settingsFolder }}</SearchLabel></template>
@@ -975,7 +985,9 @@ const serverDisconnectedBehavior = prefer.model('serverDisconnectedBehavior');
 const hemisphere = prefer.model('hemisphere');
 const showNoteActionsOnlyHover = prefer.model('showNoteActionsOnlyHover');
 const showClipButtonInNoteFooter = prefer.model('showClipButtonInNoteFooter');
-// kyunet: fork-only LLM translation preferences
+// kyunet: feat/remote-reaction-to-local
+const separateRemoteReactions = prefer.model('separateRemoteReactions');
+// kyunet: feat/llm-translation
 const kyunetAutoNotes = prefer.model('kyunetTranslation.autoNotes');
 const kyunetUserNames = prefer.model('kyunetTranslation.userNames');
 const kyunetProfiles = prefer.model('kyunetTranslation.profiles');

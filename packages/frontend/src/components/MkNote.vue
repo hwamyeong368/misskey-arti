@@ -90,6 +90,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-if="appearNote.files && appearNote.files.length > 0" style="margin-top: 8px;" @click.stop>
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files" :user="appearNote.user"/>
 					</div>
+					<!-- kyunet: feat/llm-translation - feat/image-translation -->
+					<MkKyunetImageTranslation v-if="kyunetImageFileId != null" :files="kyunetImageFiles" :noteId="appearNote.id" :selectedFileId="kyunetImageFileId" data-click-to-open-ignore @update:selectedFileId="kyunetImageFileId = $event"/>
 					<MkPoll
 						v-if="appearNote.poll"
 						:noteId="appearNote.id"
@@ -131,7 +133,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<footer :class="$style.footer">
 				<button :class="$style.footerButton" class="_button" :disabled="appearNote.canReply === false" :title="appearNote.canReply === false ? i18n.ts._interactionPolicy.replyRestricted : undefined" @click.stop="reply()">
 					<i class="ti ti-arrow-back-up"></i>
-					<p v-if="appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.repliesCount) }}</p>
+					<!-- kyunet: fix/note-capture-shared-state -->
+					<p v-if="$appearNote.repliesCount > 0" :class="$style.footerButtonCount">{{ number($appearNote.repliesCount) }}</p>
 				</button>
 				<button
 					v-if="canRenote"
@@ -141,7 +144,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					@mousedown.prevent="renote()"
 				>
 					<i class="ti ti-repeat"></i>
-					<p v-if="appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number(appearNote.renoteCount) }}</p>
+					<!-- kyunet: fix/note-capture-shared-state -->
+					<p v-if="$appearNote.renoteCount > 0" :class="$style.footerButtonCount">{{ number($appearNote.renoteCount) }}</p>
 				</button>
 				<button v-else :class="$style.footerButton" class="_button" disabled>
 					<i class="ti ti-ban"></i>
@@ -157,8 +161,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<i class="ti ti-paperclip"></i>
 				</button>
 				<!-- kyunet: LLM translate button (fork-only); pressing it again hides the translation -->
-				<button v-if="kyunetTranslateButtonVisible" :class="[$style.footerButton, { [$style.footerButtonActive]: translation != null }]" class="_button" :aria-label="i18n.ts.translate" :aria-pressed="translation != null" @click="kyunetTranslate()">
-					<i class="ti ti-language-hiragana"></i>
+				<button v-if="kyunetTranslateButtonVisible" :class="[$style.footerButton, { [$style.footerButtonActive]: translation != null }]" class="_button" :aria-label="i18n.ts.translate" :aria-pressed="translation != null" :aria-busy="translating || kyunetAutoTranslating" @click="kyunetTranslate()">
+					<MkLoading v-if="translating || kyunetAutoTranslating" :em="true" :colored="false"/>
+					<i v-else class="ti ti-language-hiragana"></i>
 				</button>
 				<button ref="menuButton" :class="$style.footerButton" class="_button" @mousedown.prevent="showMenu()">
 					<i class="ti ti-dots"></i>
@@ -225,6 +230,9 @@ import MkNoteHeader from '@/components/MkNoteHeader.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
+// kyunet: feat/llm-translation - feat/image-translation
+import MkKyunetImageTranslation from '@/components/MkKyunetImageTranslation.vue';
+import { isKyunetImageTranslationAvailable, createKyunetImageTranslationContext, KYUNET_IMAGE_TRANSLATION_KEY } from '@/composables/use-kyunet-image-translation.js';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
@@ -274,6 +282,7 @@ const {
 	translation,
 	// kyunet: fork-only LLM translation
 	kyunetTranslateButtonVisible,
+	kyunetAutoTranslating,
 	kyunetTranslate,
 	muted,
 	hardMuted,
@@ -312,6 +321,13 @@ const {
 
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
+
+// kyunet: feat/llm-translation - feat/image-translation
+// the block shows one image at a time; opening the selected image again closes it
+const kyunetImageFiles = computed(() => (appearNote.files ?? []).filter(f => f.type.startsWith('image/')));
+const kyunetImageContext = createKyunetImageTranslationContext(() => kyunetImageFiles.value, () => { collapsed.value = false; });
+const kyunetImageFileId = kyunetImageContext.selectedFileId;
+provide(KYUNET_IMAGE_TRANSLATION_KEY, !props.mock && isKyunetImageTranslationAvailable() && kyunetImageFiles.value.length > 0 ? kyunetImageContext : null);
 
 // MkNote固有
 const showSoftWordMutedWord = computed(() => prefer.s.showSoftWordMutedWord);

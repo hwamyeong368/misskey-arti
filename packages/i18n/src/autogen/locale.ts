@@ -2193,6 +2193,18 @@ export interface Locale extends ILocale {
      */
     "showNoteActionsOnlyHover": string;
     /**
+     * リモートのリアクションを区切って表示する
+     */
+    "separateRemoteReactions": string;
+    /**
+     * このサーバーにある絵文字のリアクションを先に、リモートのカスタム絵文字のリアクションを区切り線の後ろに表示します。
+     */
+    "separateRemoteReactions_description": string;
+    /**
+     * 同じ名前のローカル絵文字と画像が異なるため、リアクションできません
+     */
+    "remoteReactionImageMismatch": string;
+    /**
      * ノートのリアクション数を表示する
      */
     "showReactionsCount": string;
@@ -14424,6 +14436,54 @@ export interface Locale extends ILocale {
          * 翻訳中…
          */
         "translating": string;
+        /**
+         * 画像翻訳
+         */
+        "imageSection": string;
+        /**
+         * 画像翻訳を有効にする
+         */
+        "imageEnabled": string;
+        /**
+         * ノートの画像メニューから、画像内の文字を翻訳できるようにします。
+         */
+        "imageEnabled_description": string;
+        /**
+         * 画像翻訳用システムプロンプト
+         */
+        "imageSystemPrompt": string;
+        /**
+         * 画像翻訳に別のモデルを使う
+         */
+        "imageSeparateConnection": string;
+        /**
+         * オフのときはテキスト翻訳の接続設定を使います。
+         */
+        "imageSeparateConnection_description": string;
+        /**
+         * 画像でテスト
+         */
+        "testImage": string;
+        /**
+         * 画像ファイルを選んでください
+         */
+        "notAnImage": string;
+        /**
+         * 画像を翻訳
+         */
+        "translateImage": string;
+        /**
+         * 翻訳する文字がありません
+         */
+        "imageNoText": string;
+        /**
+         * 画像の翻訳に失敗しました
+         */
+        "imageTranslationFailed": string;
+        /**
+         * 画像 {n}
+         */
+        "imageTab": ParameterizedString<"n">;
     };
     /**
      * 雪を降らせる

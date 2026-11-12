@@ -107,6 +107,63 @@ export class MiKyunetTranslationSetting {
 	})
 	public cacheRetentionDays: number;
 
+	// kyunet: feat/llm-translation - feat/image-translation
+	// Image translation. The prompt is always image-only; the connection fields apply only with imageSeparateConnection.
+	@Column('boolean', {
+		default: false,
+	})
+	public imageEnabled: boolean;
+
+	@Column('text', {
+		nullable: true,
+	})
+	public imageSystemPrompt: string | null;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public imageSeparateConnection: boolean;
+
+	@Column('varchar', {
+		length: 1024, nullable: true,
+	})
+	public imageBaseUrl: string | null;
+
+	@Column('varchar', {
+		length: 1024, nullable: true,
+	})
+	public imageApiKey: string | null;
+
+	@Column('varchar', {
+		length: 256, nullable: true,
+	})
+	public imageModel: string | null;
+
+	@Column('jsonb', {
+		default: {},
+	})
+	public imageExtraParams: Record<string, unknown>;
+
+	@Column('boolean', {
+		default: true,
+	})
+	public imageStructuredOutput: boolean;
+
+	@Column('integer', {
+		default: 50000,
+	})
+	public imageTimeoutMs: number;
+
+	@Column('integer', {
+		default: 4,
+	})
+	public imageMaxConcurrency: number;
+
+	@Column('varchar', {
+		length: 32, default: 'max_completion_tokens',
+	})
+	public imageMaxTokensParam: KyunetMaxTokensParam;
+
 	@Column('timestamp with time zone', {
 		default: () => 'now()',
 	})

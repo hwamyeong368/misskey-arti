@@ -12,6 +12,8 @@ import { KyunetTranslationSettingService } from '@/core/KyunetTranslationSetting
 import { KyunetTranslationService } from '@/core/KyunetTranslationService.js';
 import { DEFAULT_SYSTEM_PROMPT } from '@/core/KyunetTranslationLlmClient.js';
 import { KyunetTranslationDeeplClient } from '@/core/KyunetTranslationDeeplClient.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { DEFAULT_IMAGE_SYSTEM_PROMPT } from '@/core/KyunetTranslationLlmClient.js';
 
 export const meta = {
 	tags: ['admin', 'kyunet'],
@@ -52,6 +54,19 @@ export const meta = {
 			cacheRetentionDays: { type: 'integer', optional: false, nullable: false },
 			updatedAt: { type: 'string', optional: false, nullable: false, format: 'date-time' },
 			defaultSystemPrompt: { type: 'string', optional: false, nullable: false },
+			// kyunet: feat/llm-translation - feat/image-translation
+			imageEnabled: { type: 'boolean', optional: false, nullable: false },
+			imageSystemPrompt: { type: 'string', optional: false, nullable: true },
+			imageSeparateConnection: { type: 'boolean', optional: false, nullable: false },
+			imageBaseUrl: { type: 'string', optional: false, nullable: true },
+			imageApiKeySet: { type: 'boolean', optional: false, nullable: false },
+			imageModel: { type: 'string', optional: false, nullable: true },
+			imageExtraParams: { type: 'object', optional: false, nullable: false, additionalProperties: true },
+			imageStructuredOutput: { type: 'boolean', optional: false, nullable: false },
+			imageTimeoutMs: { type: 'integer', optional: false, nullable: false },
+			imageMaxConcurrency: { type: 'integer', optional: false, nullable: false },
+			imageMaxTokensParam: { type: 'string', optional: false, nullable: false, enum: ['max_completion_tokens', 'max_tokens'] },
+			defaultImageSystemPrompt: { type: 'string', optional: false, nullable: false },
 			stats: {
 				type: 'object',
 				optional: false, nullable: false,
@@ -91,7 +106,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const deeplAuthKeySet = this.serverSettings.deeplAuthKey != null && this.serverSettings.deeplAuthKey !== '';
 			// arti: this month's DeepL usage (null when there is no key or DeepL could not be reached)
 			const deeplUsage = deeplAuthKeySet ? await this.kyunetTranslationDeeplClient.usage() : null;
-			return { ...pub, deeplAuthKeySet, deeplUsage, updatedAt: updatedAt.toISOString(), defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, stats };
+			return { ...pub, deeplAuthKeySet, deeplUsage, updatedAt: updatedAt.toISOString(), defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, defaultImageSystemPrompt: DEFAULT_IMAGE_SYSTEM_PROMPT, stats };
 		});
 	}
 }

@@ -4,7 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 
 <template>
-<div :class="[hide ? $style.hidden : $style.visible, (image.isSensitive && prefer.s.highlightSensitiveMedia) && $style.sensitive]" @click="onClick" @contextmenu.stop="onContextmenu">
+<!-- kyunet: feat/llm-translation - feat/image-translation -->
+<div :class="[hide ? $style.hidden : $style.visible, (image.isSensitive && prefer.s.highlightSensitiveMedia) && $style.sensitive, kyunetSelected && $style.kyunetSelected]" @click="onClick" @contextmenu.stop="onContextmenu">
 	<component
 		:is="disableImageLink ? 'div' : 'a'"
 		v-bind="disableImageLink ? {
@@ -68,7 +69,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { watch, ref, computed } from 'vue';
+// kyunet: feat/llm-translation - feat/image-translation
+import { watch, ref, computed, inject } from 'vue';
 import * as Misskey from 'misskey-js';
 import type { MediaComponentExposes } from '@/types/media-component.js';
 import { getStaticImageUrl } from '@/utility/media-proxy.js';
@@ -79,6 +81,9 @@ import * as os from '@/os.js';
 import { prefer } from '@/preferences.js';
 import { shouldHideFileByDefault, canRevealFile } from '@/utility/sensitive-file.js';
 import { getFileMenu } from '@/utility/get-file-menu.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { KYUNET_IMAGE_TRANSLATION_KEY } from '@/composables/use-kyunet-image-translation.js';
+import type { MenuItem } from '@/types/menu.js';
 
 const props = withDefaults(defineProps<{
 	image: Misskey.entities.DriveFile;
@@ -132,12 +137,25 @@ watch(() => props.image, (newImage) => {
 	immediate: true,
 });
 
+// kyunet: feat/llm-translation - feat/image-translation
+const kyunetImageTranslation = inject(KYUNET_IMAGE_TRANSLATION_KEY, null);
+const kyunetSelected = computed(() => kyunetImageTranslation?.selectedFileId.value === props.image.id);
+
+// the translation item goes on top of the upstream file menu
+function menuItems(): MenuItem[] {
+	const items = getFileMenu(props.image, (newHide) => { hide.value = newHide; });
+	if (kyunetImageTranslation == null || !kyunetImageTranslation.canOpen(props.image.id)) return items;
+	return [{ text: i18n.ts._kyunetTranslation.translateImage, icon: 'ti ti-language', action: () => kyunetImageTranslation.open(props.image.id) }, { type: 'divider' }, ...items];
+}
+
 function showMenu(ev: PointerEvent) {
-	os.popupMenu(getFileMenu(props.image, (newHide) => { hide.value = newHide; }), (ev.currentTarget ?? ev.target ?? undefined) as HTMLElement | undefined);
+	// kyunet: feat/llm-translation - feat/image-translation
+	os.popupMenu(menuItems(), (ev.currentTarget ?? ev.target ?? undefined) as HTMLElement | undefined);
 }
 
 function onContextmenu(ev: PointerEvent) {
-	os.contextMenu(getFileMenu(props.image, (newHide) => { hide.value = newHide; }), ev);
+	// kyunet: feat/llm-translation - feat/image-translation
+	os.contextMenu(menuItems(), ev);
 }
 
 defineExpose<MediaComponentExposes>({
@@ -164,6 +182,12 @@ defineExpose<MediaComponentExposes>({
 		border-radius: inherit;
 		box-shadow: inset 0 0 0 4px var(--MI_THEME-warn);
 	}
+}
+
+// kyunet: feat/llm-translation - feat/image-translation
+.kyunetSelected {
+	outline: 2px solid var(--MI_THEME-accent);
+	outline-offset: -2px;
 }
 
 .hiddenText {

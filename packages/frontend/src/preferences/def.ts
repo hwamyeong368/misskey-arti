@@ -323,7 +323,12 @@ export const PREF_DEF = definePreferences({
 	showClipButtonInNoteFooter: {
 		default: false,
 	},
-	// kyunet: fork-only LLM translation preferences (spec 7.2). Opt-in because they trigger automatic requests.
+	// kyunet: feat/remote-reaction-to-local
+	separateRemoteReactions: {
+		default: true,
+	},
+	// kyunet: feat/llm-translation
+	// Opt-in: both trigger automatic server requests.
 	'kyunetTranslation.autoNotes': {
 		default: false,
 	},

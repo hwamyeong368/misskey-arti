@@ -26,8 +26,11 @@ import { mainRouter } from '@/router.js';
 import { makeHotkey } from '@/utility/hotkey.js';
 import { addCustomEmoji, removeCustomEmojis, updateCustomEmojis } from '@/custom-emojis.js';
 import { prefer } from '@/preferences.js';
-import { updateCurrentAccount } from '@/accounts.js';
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+import { updateCurrentAccount, refreshCurrentAccount } from '@/accounts.js';
 import { unisonReload } from '@/utility/unison-reload.js';
+// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+import { globalEvents } from '@/events.js';
 import { isBirthday } from '@/utility/is-birthday.js';
 import { watchSnowEffect } from '@/utility/snow-effect-watcher.js';
 
@@ -363,6 +366,12 @@ export async function mainBoot() {
 
 			// 個人宛てお知らせが発行されたとき
 			main.on('announcementCreated', onAnnouncementCreated);
+
+			// kyunet: feat/improve_serverDisconnectedBehavior - feat/stream-reconnect-catchup
+			// The main channel only pushes deltas (unread badge flags), so re-read `i` to resync after a drop.
+			globalEvents.on('streamReconnected', () => {
+				refreshCurrentAccount();
+			});
 		}
 	}
 

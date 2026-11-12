@@ -8,8 +8,8 @@
 
 import * as mfm from 'mfm-js';
 
+/** Share of letters that must be in the target language's script. Latin letters (brand names, handles) are the only other script allowed. */
 export const GATE_TARGET_RATIO = 0.7;
-export const GATE_LATIN_RATIO = 0.3;
 
 export type ScriptKey = 'hangul' | 'kana' | 'han' | 'thai' | 'cyrillic' | 'latin' | 'other';
 export type ScriptCounts = Record<ScriptKey, number> & { total: number };
@@ -85,7 +85,5 @@ export function isObviouslyTargetLang(text: string, targetLang: string): boolean
 	if (counts.total === 0) return false;
 	const targetCount = targets.reduce((sum, key) => sum + counts[key], 0);
 	const disallowed = counts.total - targetCount - counts.latin;
-	return disallowed === 0
-		&& targetCount / counts.total >= GATE_TARGET_RATIO
-		&& counts.latin / counts.total <= GATE_LATIN_RATIO;
+	return disallowed === 0 && targetCount / counts.total >= GATE_TARGET_RATIO;
 }

@@ -60,7 +60,7 @@ describe('KyunetTranslationDeeplClient', () => {
 			return okReply(texts.map(t => ({ text: `번역 ${t}`, detected_source_language: 'JA' })));
 		});
 		const res = await client.complete(setting, 'ko-KR', [{ i: 0, kind: 'note', text: 'こんにちは @bob :wave:' }]);
-		expect(res.items).toEqual([{ i: 0, needsTranslation: true, sourceLangs: ['ja'], text: '번역 こんにちは @bob :wave:' }]);
+		expect(res.items).toEqual([{ i: 0, sourceLangs: ['ja'], text: '번역 こんにちは @bob :wave:' }]);
 		const [url, init] = sendMock.mock.calls[0];
 		expect(url).toBe('https://api-free.deepl.com/v2/translate');
 		expect(init.headers.Authorization).toBe(`DeepL-Auth-Key ${KEY}`);
@@ -79,7 +79,7 @@ describe('KyunetTranslationDeeplClient', () => {
 	test('same language means nothing to translate', async () => {
 		const { client } = setup(async () => okReply([{ text: '안녕', detected_source_language: 'KO' }]));
 		const res = await client.complete(setting, 'ko-KR', [{ i: 3, kind: 'user_name', text: '안녕' }]);
-		expect(res.items).toEqual([{ i: 3, needsTranslation: false, sourceLangs: ['ko'], text: '' }]);
+		expect(res.items).toEqual([{ i: 3, sourceLangs: ['ko'], text: '' }]);
 	});
 
 	test('splits more than 50 items into several requests', async () => {

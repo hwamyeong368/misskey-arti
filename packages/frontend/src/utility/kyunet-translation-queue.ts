@@ -92,26 +92,39 @@ export class KyunetTranslationQueue {
 
 	/** Manual translation: no debounce, `force: true`, result also written into the shared cache entry. */
 	public async translateNow(ref: KyunetTranslationRef, targetLang: string): Promise<KyunetTranslationResult> {
-		const key = kyunetTranslationKey(ref, targetLang);
-		let entry = this.entries.get(key);
-		if (entry == null) {
-			entry = { ref, targetLang, result: ref_(null), retryAt: null, inFlight: false };
-			this.entries.set(key, entry);
-		}
-		let result: KyunetTranslationResult;
+		return (await this.translateManyNow([ref], targetLang))[0];
+	}
+
+	/** Manual translation of several items in one forced call (a profile's bio and fields); results are positional. */
+	public async translateManyNow(refs: KyunetTranslationRef[], targetLang: string): Promise<KyunetTranslationResult[]> {
+		if (refs.length === 0) return [];
+		const entries = refs.map(ref => {
+			const key = kyunetTranslationKey(ref, targetLang);
+			let entry = this.entries.get(key);
+			if (entry == null) {
+				entry = { ref, targetLang, result: ref_(null), retryAt: null, inFlight: false };
+				this.entries.set(key, entry);
+			}
+			return entry;
+		});
+		let results: KyunetTranslationResult[];
 		let rateLimited = false;
 		try {
-			result = (await this.send([ref], targetLang, true))[0] ?? FAILED;
+			const sent = await this.send(refs, targetLang, true);
+			results = refs.map((_, i) => sent[i] ?? FAILED);
 		} catch (err) {
-			result = FAILED;
+			results = refs.map(() => FAILED);
 			rateLimited = isRateLimitError(err);
 		}
-		// a failed forced retry must not throw away a good cached translation; the caller still sees the failure
-		if (!(result.status === 'failed' && entry.result.value?.status === 'ok')) {
-			entry.result.value = result;
-			entry.retryAt = this.retryAtFor(result, rateLimited);
-		}
-		return result;
+		entries.forEach((entry, i) => {
+			const result = results[i];
+			// a failed forced retry must not throw away a good cached translation; the caller still sees the failure
+			if (!(result.status === 'failed' && entry.result.value?.status === 'ok')) {
+				entry.result.value = result;
+				entry.retryAt = this.retryAtFor(result, rateLimited);
+			}
+		});
+		return results;
 	}
 
 	/** Sends one slot now, ignoring the debounce timer (the in-flight rule still applies). */

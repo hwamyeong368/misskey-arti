@@ -164,8 +164,10 @@ export function useNote(
 		await translateNoteWith(appearNote, translation, translating);
 	}
 
-	// kyunet: automatic LLM translation on mount (spec 7.3). No spinner, failures are silent, own notes are skipped,
-	// and obviously-target-language notes never leave the client.
+	// kyunet: automatic LLM translation on mount (spec 7.3). Failures are silent, own notes are skipped, and
+	// obviously-target-language notes never leave the client. While the request is pending only the footer button
+	// shows a spinner (not the translation box), so the timeline does not flicker.
+	const kyunetAutoTranslating = ref(false);
 	if (
 		!props.mock
 		&& prefer.s['kyunetTranslation.autoNotes']
@@ -178,9 +180,11 @@ export function useNote(
 			if (res.status === 'ok' && res.text != null && translation.value == null) {
 				translation.value = { sourceLang: kyunetLangNames(res.sourceLangs), text: res.text };
 			}
+			kyunetAutoTranslating.value = false;
 			return true;
 		};
 		if (!applyAuto(auto.value)) {
+			kyunetAutoTranslating.value = true;
 			const stopAuto = watch(auto, (res) => {
 				if (applyAuto(res)) stopAuto();
 			});
@@ -232,7 +236,8 @@ export function useNote(
 				const { dispose } = os.popup(MkUsersTooltip, {
 					showing,
 					users,
-					count: appearNote.renoteCount,
+					// kyunet: fix/note-capture-shared-state
+					count: $appearNote.renoteCount,
 					anchorElement: els.renoteButton!.value,
 				}, {
 					closed: () => dispose(),
@@ -482,6 +487,7 @@ export function useNote(
 		translation,
 		// kyunet: fork-only LLM translation
 		kyunetTranslateButtonVisible,
+		kyunetAutoTranslating,
 		muted,
 		hardMuted,
 		collapsed,

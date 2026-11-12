@@ -46,6 +46,18 @@ export const paramDef = {
 		batchMaxItems: { type: 'integer', minimum: 1, maximum: 50 },
 		heuristicGate: { type: 'boolean' },
 		cacheRetentionDays: { type: 'integer', minimum: 0, maximum: 3650 },
+		// kyunet: feat/llm-translation - feat/image-translation
+		imageEnabled: { type: 'boolean' },
+		imageSystemPrompt: { type: 'string', nullable: true, maxLength: 20000 },
+		imageSeparateConnection: { type: 'boolean' },
+		imageBaseUrl: { type: 'string', maxLength: 1024, nullable: true },
+		imageApiKey: { type: 'string', maxLength: 1024 },
+		imageModel: { type: 'string', maxLength: 256, nullable: true },
+		imageExtraParams: { type: 'object', additionalProperties: true },
+		imageStructuredOutput: { type: 'boolean' },
+		imageTimeoutMs: { type: 'integer', minimum: 1000, maximum: 600000 },
+		imageMaxConcurrency: { type: 'integer', minimum: 1, maximum: 256 },
+		imageMaxTokensParam: { type: 'string', enum: ['max_completion_tokens', 'max_tokens'] },
 	},
 	required: [],
 } as const;
@@ -60,6 +72,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				if (Array.isArray(ps.extraParams)) throw new ApiError(meta.errors.invalidParam, { reason: 'extraParams must be an object' });
 				if ('messages' in ps.extraParams) throw new ApiError(meta.errors.invalidParam, { reason: 'extraParams.messages is reserved' });
 			}
+			// kyunet: feat/llm-translation - feat/image-translation
+			if (ps.imageExtraParams != null) {
+				if (Array.isArray(ps.imageExtraParams)) throw new ApiError(meta.errors.invalidParam, { reason: 'imageExtraParams must be an object' });
+				if ('messages' in ps.imageExtraParams) throw new ApiError(meta.errors.invalidParam, { reason: 'imageExtraParams.messages is reserved' });
+			}
 			// Pick only declared params: the request body also carries the credential `i`, which must not reach the update.
 			const patch: KyunetTranslationSettingPatch = {};
 			for (const key of Object.keys(paramDef.properties) as (keyof typeof paramDef.properties)[]) {
@@ -68,6 +85,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (ps.baseUrl === '') patch.baseUrl = null;
 			if (ps.model === '') patch.model = null;
 			if (ps.systemPrompt === '') patch.systemPrompt = null;
+			// kyunet: feat/llm-translation - feat/image-translation
+			if (ps.imageBaseUrl === '') patch.imageBaseUrl = null;
+			if (ps.imageModel === '') patch.imageModel = null;
+			if (ps.imageSystemPrompt === '') patch.imageSystemPrompt = null;
 			await this.kyunetTranslationSettingService.update(patch);
 		});
 	}

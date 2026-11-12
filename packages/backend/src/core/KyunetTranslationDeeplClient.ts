@@ -129,7 +129,6 @@ export class KyunetTranslationDeeplClient {
 				const sameLang = detected !== '' && detected.split('-')[0] === targetPrimary;
 				output.push({
 					i: chunk[k].i,
-					needsTranslation: !sameLang,
 					sourceLangs: detected !== '' ? [detected] : [],
 					text: sameLang ? '' : restoreFromDeepl(t.text, prepared[k].tokens),
 				});

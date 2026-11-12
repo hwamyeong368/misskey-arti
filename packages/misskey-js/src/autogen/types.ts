@@ -512,6 +512,15 @@ export type paths = {
          */
         post: operations['admin___kyunet___translation___test'];
     };
+    '/admin/kyunet/translation/test-image': {
+        /**
+         * admin/kyunet/translation/test-image
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *write:admin:meta*
+         */
+        post: operations['admin___kyunet___translation___test-image'];
+    };
     '/admin/kyunet/translation/update': {
         /**
          * admin/kyunet/translation/update
@@ -3146,6 +3155,15 @@ export type paths = {
          *     **Credential required**: *Yes* / **Permission**: *read:account*
          */
         post: operations['kyunet___translate'];
+    };
+    '/kyunet/translate-image': {
+        /**
+         * kyunet/translate-image
+         * @description No description provided.
+         *
+         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         */
+        post: operations['kyunet___translate-image'];
     };
     '/meta': {
         /**
@@ -5787,6 +5805,7 @@ export type components = {
             enableServiceWorker: boolean;
             translatorAvailable: boolean;
             llmTranslatorAvailable: boolean;
+            llmImageTranslatorAvailable: boolean;
             sentryForFrontend: {
                 options: {
                     dsn: string;
@@ -9926,6 +9945,21 @@ export interface operations {
                         /** Format: date-time */
                         updatedAt: string;
                         defaultSystemPrompt: string;
+                        imageEnabled: boolean;
+                        imageSystemPrompt: string | null;
+                        imageSeparateConnection: boolean;
+                        imageBaseUrl: string | null;
+                        imageApiKeySet: boolean;
+                        imageModel: string | null;
+                        imageExtraParams: {
+                            [key: string]: unknown;
+                        };
+                        imageStructuredOutput: boolean;
+                        imageTimeoutMs: number;
+                        imageMaxConcurrency: number;
+                        /** @enum {string} */
+                        imageMaxTokensParam: 'max_completion_tokens' | 'max_tokens';
+                        defaultImageSystemPrompt: string;
                         stats: {
                             cacheRows: number;
                             gateSkipped: number;
@@ -10004,7 +10038,80 @@ export interface operations {
                         ok: boolean;
                         latencyMs: number;
                         text: string | null;
-                        needsTranslation: boolean | null;
+                        sourceLangs: string[] | null;
+                        error: string | null;
+                        raw: string | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'admin___kyunet___translation___test-image': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    fileId: string;
+                    targetLang: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        ok: boolean;
+                        latencyMs: number;
+                        text: string | null;
                         sourceLangs: string[] | null;
                         error: string | null;
                         raw: string | null;
@@ -10083,6 +10190,20 @@ export interface operations {
                     batchMaxItems?: number;
                     heuristicGate?: boolean;
                     cacheRetentionDays?: number;
+                    imageEnabled?: boolean;
+                    imageSystemPrompt?: string | null;
+                    imageSeparateConnection?: boolean;
+                    imageBaseUrl?: string | null;
+                    imageApiKey?: string;
+                    imageModel?: string | null;
+                    imageExtraParams?: {
+                        [key: string]: unknown;
+                    };
+                    imageStructuredOutput?: boolean;
+                    imageTimeoutMs?: number;
+                    imageMaxConcurrency?: number;
+                    /** @enum {string} */
+                    imageMaxTokensParam?: 'max_completion_tokens' | 'max_tokens';
                 };
             };
         };
@@ -30962,6 +31083,91 @@ export interface operations {
                             text: string | null;
                             sourceLangs: string[];
                         }[];
+                    };
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    'kyunet___translate-image': {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** Format: misskey:id */
+                    fileId: string;
+                    /** Format: misskey:id */
+                    noteId: string;
+                    targetLang: string;
+                    /** @default false */
+                    force?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': {
+                        /** @enum {string} */
+                        status: 'ok' | 'unavailable' | 'failed';
+                        text: string | null;
+                        sourceLangs: string[];
                     };
                 };
             };

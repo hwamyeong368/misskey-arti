@@ -840,6 +840,9 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		if (data.renote && data.renote.userId !== user.id && !user.isBot) {
 			this.incRenoteCount(data.renote);
+			// kyunet: fix/note-capture-shared-state
+			// The stream event below packs this in-memory renote; without this it carries the count from before this renote.
+			data.renote.renoteCount++;
 		}
 
 		if (data.poll && data.poll.expiresAt) {
