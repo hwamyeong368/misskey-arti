@@ -80,6 +80,8 @@ import type {
 	AdminKyunetTranslationShowResponse,
 	AdminKyunetTranslationTestRequest,
 	AdminKyunetTranslationTestResponse,
+	AdminKyunetTranslationTestImageRequest,
+	AdminKyunetTranslationTestImageResponse,
 	AdminKyunetTranslationUpdateRequest,
 	AdminMetaResponse,
 	AdminPromoCreateRequest,
@@ -514,6 +516,8 @@ import type {
 	InviteListResponse,
 	KyunetTranslateRequest,
 	KyunetTranslateResponse,
+	KyunetTranslateImageRequest,
+	KyunetTranslateImageResponse,
 	MetaRequest,
 	MetaResponse,
 	MiauthGenTokenRequest,
@@ -759,6 +763,7 @@ export type Endpoints = {
 	'admin/kyunet/translation/clear-cache': { req: AdminKyunetTranslationClearCacheRequest; res: AdminKyunetTranslationClearCacheResponse };
 	'admin/kyunet/translation/show': { req: EmptyRequest; res: AdminKyunetTranslationShowResponse };
 	'admin/kyunet/translation/test': { req: AdminKyunetTranslationTestRequest; res: AdminKyunetTranslationTestResponse };
+	'admin/kyunet/translation/test-image': { req: AdminKyunetTranslationTestImageRequest; res: AdminKyunetTranslationTestImageResponse };
 	'admin/kyunet/translation/update': { req: AdminKyunetTranslationUpdateRequest; res: EmptyResponse };
 	'admin/meta': { req: EmptyRequest; res: AdminMetaResponse };
 	'admin/promo/create': { req: AdminPromoCreateRequest; res: EmptyResponse };
@@ -1047,6 +1052,7 @@ export type Endpoints = {
 	'invite/limit': { req: EmptyRequest; res: InviteLimitResponse };
 	'invite/list': { req: InviteListRequest; res: InviteListResponse };
 	'kyunet/translate': { req: KyunetTranslateRequest; res: KyunetTranslateResponse };
+	'kyunet/translate-image': { req: KyunetTranslateImageRequest; res: KyunetTranslateImageResponse };
 	'meta': { req: MetaRequest; res: MetaResponse };
 	'miauth/gen-token': { req: MiauthGenTokenRequest; res: MiauthGenTokenResponse };
 	'mute/create': { req: MuteCreateRequest; res: EmptyResponse };

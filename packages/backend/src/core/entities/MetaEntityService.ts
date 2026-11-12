@@ -131,6 +131,8 @@ export class MetaEntityService {
 			translatorAvailable: instance.deeplAuthKey != null,
 			// kyunet: true when the fork-only LLM translation route is configured (spec 6.4)
 			llmTranslatorAvailable: this.kyunetTranslationSettingService.isAvailable(),
+			// kyunet: feat/llm-translation - feat/image-translation
+			llmImageTranslatorAvailable: this.kyunetTranslationSettingService.isImageAvailable(),
 
 			serverRules: instance.serverRules,
 

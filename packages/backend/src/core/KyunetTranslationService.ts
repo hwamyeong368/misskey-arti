@@ -15,6 +15,8 @@ import type { Config } from '@/config.js';
 import type { DriveFilesRepository, KyunetTranslationsRepository, NotesRepository, PollsRepository, UserProfilesRepository, UsersRepository } from '@/models/_.js';
 import type { MiNote } from '@/models/Note.js';
 import { buildNoteTranslationSource } from '@/misc/kyunet-note-source.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { KyunetImageLoader } from '@/core/KyunetImageLoader.js';
 import type { MiKyunetTranslation } from '@/models/KyunetTranslation.js';
 import { kyunetTranslationProviders } from '@/models/KyunetTranslationSetting.js';
 import type { MiKyunetTranslationSetting, KyunetTranslationProvider } from '@/models/KyunetTranslationSetting.js';
@@ -30,6 +32,8 @@ import { KyunetTranslationDeeplClient } from '@/core/KyunetTranslationDeeplClien
 import type { KyunetLlmErrorReason, LlmInputItem, LlmOutputItem, TranslationKind } from '@/core/KyunetTranslationLlmClient.js';
 import { splitForTranslation } from '@/misc/kyunet-translation-split.js';
 import type { TextPiece } from '@/misc/kyunet-translation-split.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import type { LlmImageInput } from '@/core/KyunetTranslationLlmClient.js';
 import { isObviouslyTargetLang, primaryLang } from '@/misc/kyunet-script-gate.js';
 import { shouldHideNoteByTime } from '@/misc/should-hide-note-by-time.js';
 
@@ -84,6 +88,9 @@ function frozenEmptyResult(status: 'unavailable' | 'failed'): TranslationResult 
 const UNAVAILABLE = frozenEmptyResult('unavailable');
 const FAILED = frozenEmptyResult('failed');
 
+// kyunet: feat/llm-translation - feat/image-translation
+type LlmLimits = { timeoutMs: number; maxConcurrency: number };
+
 const SEMAPHORE_POLL_MS = 250;
 const SEMAPHORE_MAX_WAIT_MS = 10000;
 // per-hash in-flight lock; design and numbers in FORK-SPEC.md § LLM 번역 진행 중 락
@@ -136,6 +143,9 @@ export class KyunetTranslationService {
 		private noteEntityService: NoteEntityService,
 		private idService: IdService,
 		private loggerService: LoggerService,
+
+		// kyunet: feat/llm-translation - feat/image-translation
+		private imageLoader: KyunetImageLoader,
 	) {
 		this.logger = this.loggerService.getLogger('kyunet-translation');
 	}
@@ -181,7 +191,33 @@ export class KyunetTranslationService {
 		return buildNoteTranslationSource(note, poll?.choices ?? [], comments);
 	}
 
+	// kyunet: feat/llm-translation - feat/image-translation
+	@bindThis
+	public hashForImage(md5: string): string {
+		return createHash('sha256').update(`image\n${md5}`).digest('hex');
+	}
+
 	//#region resolvers
+	// kyunet: feat/llm-translation - feat/image-translation
+	// shared by the note text and image paths
+	private async findVisibleNote(noteId: string, me: MiLocalUser): Promise<MiNote | null> {
+		const note = await this.notesRepository.findOne({ where: { id: noteId }, relations: { user: true } });
+		if (note?.user == null) return null;
+		if (!(await this.noteEntityService.isVisibleForMe(note, me.id))) return null;
+		// Mirrors NoteEntityService.shouldHideNote for an authenticated requester: keep in sync with it.
+		// Why not pack(): FORK-SPEC.md § LLM 번역.
+		if (me.id !== note.userId) {
+			const createdAt = this.idService.parse(note.id).date; // same source as the packed note's createdAt
+			if (shouldHideNoteByTime(note.user.makeNotesHiddenBefore, createdAt)) return null;
+			if (
+				(note.visibility === 'public' || note.visibility === 'home')
+				&& shouldHideNoteByTime(note.user.makeNotesFollowersOnlyBefore, createdAt)
+				&& !(await this.noteEntityService.isVisibleForMe({ ...note, visibility: 'followers' }, me.id))
+			) return null;
+		}
+		return note;
+	}
+
 	private async resolve(ref: TranslationItemRef, me: MiLocalUser, setting: MiKyunetTranslationSetting): Promise<Resolved> {
 		const raw = await this.resolveRaw(ref, me);
 		if (raw == null) return { ok: false };
@@ -193,21 +229,9 @@ export class KyunetTranslationService {
 	private async resolveRaw(ref: TranslationItemRef, me: MiLocalUser): Promise<{ kind: TranslationKind; text: string } | null> {
 		switch (ref.type) {
 			case 'note': {
-				const note = await this.notesRepository.findOne({ where: { id: ref.id }, relations: { user: true } });
-				if (note?.user == null) return null;
-				if (!(await this.noteEntityService.isVisibleForMe(note, me.id))) return null;
-				// Mirrors NoteEntityService.shouldHideNote for an authenticated requester (keep in sync with it).
-				// A full pack() per item was too expensive; requireSigninToViewContents / ugcVisibilityForVisitor only
-				// apply to anonymous requesters, and this endpoint requires credentials.
-				if (me.id !== note.userId) {
-					const createdAt = this.idService.parse(note.id).date; // same source as the packed note's createdAt
-					if (shouldHideNoteByTime(note.user.makeNotesHiddenBefore, createdAt)) return null;
-					if (
-						(note.visibility === 'public' || note.visibility === 'home')
-						&& shouldHideNoteByTime(note.user.makeNotesFollowersOnlyBefore, createdAt)
-						&& !(await this.noteEntityService.isVisibleForMe({ ...note, visibility: 'followers' }, me.id))
-					) return null;
-				}
+				// kyunet: feat/llm-translation - feat/image-translation
+				const note = await this.findVisibleNote(ref.id, me);
+				if (note == null) return null;
 				return { kind: 'note', text: await this.noteSource(note) };
 			}
 			case 'user_name': {
@@ -235,35 +259,39 @@ export class KyunetTranslationService {
 	//#endregion
 
 	//#region semaphore / stats
-	private async acquire(setting: MiKyunetTranslationSetting): Promise<boolean> {
+	// kyunet: feat/llm-translation - feat/image-translation
+	// takes limits + key so the image path can use its own counter (see KyunetLlmConnection.semaphoreScope)
+	private async acquire(setting: LlmLimits, key = this.semaphoreKey): Promise<boolean> {
 		const deadline = Date.now() + Math.min(setting.timeoutMs, SEMAPHORE_MAX_WAIT_MS);
 		for (;;) {
-			const n = await this.redisClient.incr(this.semaphoreKey);
+			const n = await this.redisClient.incr(key);
 			if (n === 1) {
 				// first holder sets the TTL; later holders do not refresh it so a leaked count eventually expires
-				await this.redisClient.expire(this.semaphoreKey, Math.ceil((setting.timeoutMs * 2) / 1000));
+				await this.redisClient.expire(key, Math.ceil((setting.timeoutMs * 2) / 1000));
 			}
 			if (n <= setting.maxConcurrency) return true;
-			await this.redisClient.decr(this.semaphoreKey);
+			await this.redisClient.decr(key);
 			if (Date.now() >= deadline) return false;
 			await sleep(SEMAPHORE_POLL_MS);
 		}
 	}
 
-	private async release(): Promise<void> {
-		const n = await this.redisClient.decr(this.semaphoreKey);
+	// kyunet: feat/llm-translation - feat/image-translation
+	private async release(key = this.semaphoreKey): Promise<void> {
+		const n = await this.redisClient.decr(key);
 		if (n < 0) {
 			// the key expired while we were running: reset instead of leaving a negative floor
-			await this.redisClient.del(this.semaphoreKey);
+			await this.redisClient.del(key);
 		}
 	}
 
-	private inflightTtlMs(setting: MiKyunetTranslationSetting): number {
+	// kyunet: feat/llm-translation - feat/image-translation
+	private inflightTtlMs(setting: Pick<LlmLimits, 'timeoutMs'>): number {
 		return setting.timeoutMs + SEMAPHORE_MAX_WAIT_MS + INFLIGHT_LOCK_MARGIN_MS;
 	}
 
 	/** 'unknown' = Redis failed; the caller translates without a lock. */
-	private async tryLockInflight(setting: MiKyunetTranslationSetting, langKey: string, hash: string): Promise<'owned' | 'held' | 'unknown'> {
+	private async tryLockInflight(setting: Pick<LlmLimits, 'timeoutMs'>, langKey: string, hash: string): Promise<'owned' | 'held' | 'unknown'> {
 		try {
 			const r = await this.redisClient.set(this.inflightKey(langKey, hash), '1', 'PX', this.inflightTtlMs(setting), 'NX');
 			return r === 'OK' ? 'owned' : 'held';
@@ -274,7 +302,7 @@ export class KyunetTranslationService {
 	}
 
 	/** Resolves when the lock is gone; the deadline is only a guard in case the key outlives its TTL. */
-	private async waitInflight(setting: MiKyunetTranslationSetting, langKey: string, hash: string): Promise<void> {
+	private async waitInflight(setting: Pick<LlmLimits, 'timeoutMs'>, langKey: string, hash: string): Promise<void> {
 		const deadline = Date.now() + this.inflightTtlMs(setting) + INFLIGHT_LOCK_MARGIN_MS;
 		const key = this.inflightKey(langKey, hash);
 		for (;;) {
@@ -289,7 +317,8 @@ export class KyunetTranslationService {
 		}
 	}
 
-	private async unlockInflight(langKey: string, units: WorkUnit[]): Promise<void> {
+	// kyunet: feat/llm-translation - feat/image-translation
+	private async unlockInflight(langKey: string, units: Pick<WorkUnit, 'hash' | 'locked'>[]): Promise<void> {
 		const keys = units.filter(u => u.locked).map(u => this.inflightKey(langKey, u.hash));
 		if (keys.length === 0) return;
 		try {
@@ -370,6 +399,89 @@ export class KyunetTranslationService {
 			this.runAfterWait(waiting, setting, langKey, results),
 		]);
 		return results;
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	/** One image of a note the requester can see. Same cache table, in-flight lock and stats as the text path. */
+	@bindThis
+	public async translateImage(fileId: string, noteId: string, targetLang: string, me: MiLocalUser, opts: { force?: boolean } = {}): Promise<TranslationResult> {
+		const force = opts.force ?? false;
+		const langKey = targetLang.toLowerCase();
+
+		const note = await this.findVisibleNote(noteId, me);
+		if (note == null || !note.fileIds.includes(fileId)) return UNAVAILABLE;
+		const file = await this.driveFilesRepository.findOneBy({ id: fileId });
+		if (file == null || !file.type.startsWith('image/')) return UNAVAILABLE;
+		const hash = this.hashForImage(file.md5);
+		const conn = this.settingService.getImageConnection();
+
+		const readCache = async (): Promise<TranslationResult | null> => {
+			const hit = await this.translationsRepository.findOneBy({ contentHash: hash, targetLang: langKey });
+			if (hit == null) return null;
+			this.incrStat('cacheHits');
+			return { status: 'ok', text: hit.text, sourceLangs: hit.sourceLangs };
+		};
+
+		if (!force) {
+			const cached = await readCache();
+			if (cached != null) return cached;
+		}
+
+		const lock = await this.tryLockInflight(conn, langKey, hash);
+		if (lock === 'held' && !force) {
+			await this.waitInflight(conn, langKey, hash);
+			return (await readCache().catch(() => null)) ?? FAILED;
+		}
+
+		// Download and resize before taking an LLM slot: a slow remote file must not hold a slot the text path shares.
+		let image: LlmImageInput;
+		try {
+			image = await this.imageLoader.load(file);
+		} catch (err) {
+			this.logger.warn(`loading image ${fileId} failed: ${err instanceof Error ? err.message : String(err)}`);
+			await this.unlockInflight(langKey, [{ hash, locked: lock === 'owned' }]);
+			return FAILED;
+		}
+
+		const semKey = conn.semaphoreScope === 'image' ? `${this.semaphoreKey}:image` : this.semaphoreKey;
+		let acquired = false;
+		let row: MiKyunetTranslation | null = null;
+		let result: TranslationResult = FAILED;
+		try {
+			acquired = await this.acquire(conn, semKey);
+			if (!acquired) {
+				this.logger.warn('semaphore wait exceeded; image translation failed without an LLM call');
+			} else {
+				this.incrStat('llmItems');
+				this.incrStat('llmCalls');
+				const { result: out } = await this.llmClient.completeImage(conn, targetLang, image);
+				const text = this.normalizeText(out.text) === '' ? null : out.text;
+				row = { contentHash: hash, targetLang: langKey, text, sourceLangs: out.sourceLangs, provider: 'llm', model: conn.model ?? '', createdAt: new Date() };
+				result = { status: 'ok', text, sourceLangs: out.sourceLangs };
+			}
+		} catch (err) {
+			if (acquired) this.incrStat('llmFailures');
+			const reason = err instanceof KyunetLlmError ? err.reason : 'unknown';
+			this.logger.warn(`image translation of ${fileId} failed (${reason}): ${err instanceof Error ? err.message : String(err)}`);
+		} finally {
+			if (acquired) {
+				try {
+					await this.release(semKey);
+				} catch (err) {
+					this.logger.warn(`semaphore release failed: ${err instanceof Error ? err.message : String(err)}`);
+				}
+			}
+		}
+
+		if (row != null) {
+			try {
+				await this.upsert([row], force);
+			} catch (err) {
+				this.logger.warn(`storing image translation failed: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
+		await this.unlockInflight(langKey, [{ hash, locked: lock === 'owned' }]);
+		return result;
 	}
 
 	/** arti: owned units: split long texts, batch, run, glue back, store, then release the in-flight lock. */
@@ -580,6 +692,24 @@ export class KyunetTranslationService {
 		}
 	}
 
+	// kyunet: feat/llm-translation - feat/image-translation
+	/** Admin check of the image path: any drive file, no note check, nothing cached. */
+	@bindThis
+	public async testImage(fileId: string, targetLang: string): Promise<{ ok: boolean; latencyMs: number; result?: { text: string | null; sourceLangs: string[] }; error?: string; raw?: unknown }> {
+		const started = Date.now();
+		try {
+			const file = await this.driveFilesRepository.findOneBy({ id: fileId });
+			if (file == null || !file.type.startsWith('image/')) throw new Error('no such image file');
+			const image = await this.imageLoader.load(file);
+			const { result, raw, latencyMs } = await this.llmClient.completeImage(this.settingService.getImageConnection(), targetLang, image);
+			const text = this.normalizeText(result.text) === '' ? null : result.text;
+			return { ok: true, latencyMs, result: { text, sourceLangs: result.sourceLangs }, raw };
+		} catch (err) {
+			const reason = err instanceof KyunetLlmError ? `${err.reason}: ${err.message}` : (err instanceof Error ? err.message : String(err));
+			return { ok: false, latencyMs: Date.now() - started, error: reason };
+		}
+	}
+
 	@bindThis
 	public async clearCache(filter: ClearCacheFilter): Promise<number> {
 		if ('all' in filter) {
@@ -598,7 +728,11 @@ export class KyunetTranslationService {
 		if (note == null) throw new Error('no such note');
 		const text = await this.noteSource(note);
 		const res = await this.translationsRepository.delete({ contentHash: In(kyunetTranslationProviders.map(provider => this.hashFor('note', text, provider))) });
-		return res.affected ?? 0;
+		// kyunet: feat/llm-translation - feat/image-translation
+		const images = note.fileIds.length === 0 ? [] : (await this.driveFilesRepository.findBy({ id: In(note.fileIds) })).filter(f => f.type.startsWith('image/'));
+		if (images.length === 0) return res.affected ?? 0;
+		const imageRes = await this.translationsRepository.delete({ contentHash: In(images.map(f => this.hashForImage(f.md5))) });
+		return (res.affected ?? 0) + (imageRes.affected ?? 0);
 	}
 
 	/** Called from CleanProcessorService. */

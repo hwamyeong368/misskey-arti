@@ -12,6 +12,7 @@ vi.mock('@/i.js', () => ({ $i: null }));
 vi.mock('@/instance.js', () => ({ instance: {} }));
 
 const { kyunetLangNames } = await import('@/composables/use-kyunet-translation.js');
+const { i18n } = await import('@/i18n.js');
 
 describe('kyunetLangNames', () => {
 	beforeEach(() => {
@@ -32,5 +33,10 @@ describe('kyunetLangNames', () => {
 
 	test('falls back to the code itself when it is not a valid tag', () => {
 		expect(kyunetLangNames(['???'])).toBe('???');
+	});
+
+	test('an empty list reads as unknown instead of leaving the header blank', () => {
+		expect(i18n.ts.unknown).toBeTruthy();
+		expect(kyunetLangNames([])).toBe(i18n.ts.unknown);
 	});
 });

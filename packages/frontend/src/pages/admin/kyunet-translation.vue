@@ -114,6 +114,71 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</div>
 			</MkFolder>
 
+			<!-- kyunet: feat/llm-translation - feat/image-translation -->
+			<MkFolder>
+				<template #label>{{ i18n.ts._kyunetTranslation.imageSection }}</template>
+
+				<div class="_gaps_m">
+					<MkSwitch v-model="imageForm.imageEnabled">
+						<template #label>{{ i18n.ts._kyunetTranslation.imageEnabled }}</template>
+						<template #caption>{{ i18n.ts._kyunetTranslation.imageEnabled_description }}</template>
+					</MkSwitch>
+
+					<MkTextarea v-model="imageForm.imageSystemPrompt" tall :placeholder="defaultImageSystemPrompt">
+						<template #label>{{ i18n.ts._kyunetTranslation.imageSystemPrompt }}</template>
+						<template #caption>{{ i18n.ts._kyunetTranslation.systemPromptCaption }}</template>
+					</MkTextarea>
+
+					<MkSwitch v-model="imageForm.imageSeparateConnection">
+						<template #label>{{ i18n.ts._kyunetTranslation.imageSeparateConnection }}</template>
+						<template #caption>{{ i18n.ts._kyunetTranslation.imageSeparateConnection_description }}</template>
+					</MkSwitch>
+
+					<template v-if="imageForm.imageSeparateConnection">
+						<MkInput v-model="imageForm.imageBaseUrl" type="url">
+							<template #prefix><i class="ti ti-link"></i></template>
+							<template #label>{{ i18n.ts._kyunetTranslation.baseUrl }}</template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.baseUrlCaption }}</template>
+						</MkInput>
+
+						<MkInput v-model="imageForm.imageApiKey" type="password" autocomplete="off">
+							<template #prefix><i class="ti ti-key"></i></template>
+							<template #label>{{ i18n.ts._kyunetTranslation.apiKey }} <span v-if="imageApiKeySet" class="_beta">{{ i18n.ts._kyunetTranslation.apiKeySet }}</span></template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.apiKeyCaption }}</template>
+						</MkInput>
+						<MkButton v-if="imageApiKeySet" danger @click="deleteImageApiKey">{{ i18n.ts._kyunetTranslation.deleteApiKey }}</MkButton>
+
+						<MkInput v-model="imageForm.imageModel">
+							<template #prefix><i class="ti ti-cpu"></i></template>
+							<template #label>{{ i18n.ts._kyunetTranslation.model }}</template>
+						</MkInput>
+
+						<MkTextarea v-model="imageForm.imageExtraParams" code>
+							<template #label>{{ i18n.ts._kyunetTranslation.extraParams }}</template>
+							<template #caption>{{ i18n.ts._kyunetTranslation.extraParamsOverrideNote }}</template>
+						</MkTextarea>
+
+						<MkSwitch v-model="imageForm.imageStructuredOutput">
+							<template #label>{{ i18n.ts._kyunetTranslation.structuredOutput }}</template>
+						</MkSwitch>
+
+						<MkSelect v-model="imageMaxTokensParam" :items="imageMaxTokensParamDef">
+							<template #label>{{ i18n.ts._kyunetTranslation.maxTokensParam }}</template>
+						</MkSelect>
+
+						<MkInput v-model="imageForm.imageTimeoutMs" type="number" :min="1000" :max="600000">
+							<template #label>{{ i18n.ts._kyunetTranslation.timeoutMs }}</template>
+						</MkInput>
+
+						<MkInput v-model="imageForm.imageMaxConcurrency" type="number" :min="1" :max="256">
+							<template #label>{{ i18n.ts._kyunetTranslation.maxConcurrency }}</template>
+						</MkInput>
+					</template>
+
+					<MkButton primary @click="saveImage">{{ i18n.ts.save }}</MkButton>
+				</div>
+			</MkFolder>
+
 			<MkFolder>
 				<template #label>{{ i18n.ts._kyunetTranslation.testTranslation }}</template>
 
@@ -134,7 +199,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<MkInfo v-if="!testResult.ok" warn>{{ testResult.error }}</MkInfo>
 						<MkKeyValue v-else-if="testResult.text == null">
 							<template #key>{{ i18n.ts._kyunetTranslation.result }}</template>
-							<template #value>{{ i18n.ts._kyunetTranslation.noTranslationNeeded }} ({{ (testResult.sourceLangs ?? []).join(', ') }})</template>
+							<!-- kyunet: feat/llm-translation - feat/image-translation -->
+							<template v-if="testKind === 'image'" #value>{{ i18n.ts._kyunetTranslation.imageNoText }}</template>
+							<template v-else #value>{{ i18n.ts._kyunetTranslation.noTranslationNeeded }} ({{ (testResult.sourceLangs ?? []).join(', ') }})</template>
 						</MkKeyValue>
 						<MkKeyValue v-else>
 							<template #key>{{ i18n.ts._kyunetTranslation.result }} ({{ (testResult.sourceLangs ?? []).join(', ') }})</template>
@@ -145,6 +212,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<pre :class="$style.pre">{{ testResult.raw }}</pre>
 						</MkFolder>
 					</div>
+
+					<!-- kyunet: feat/llm-translation - feat/image-translation -->
+					<MkButton :disabled="testing" @click="runImageTest"><i class="ti ti-photo"></i> {{ i18n.ts._kyunetTranslation.testImage }}</MkButton>
 				</div>
 			</MkFolder>
 
@@ -197,9 +267,13 @@ import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import { useMkSelect } from '@/composables/use-mkselect.js';
 import { miLocalStorage } from '@/local-storage.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { chooseDriveFile } from '@/utility/drive.js';
 
 type Show = Misskey.Endpoints['admin/kyunet/translation/show']['res'];
-type TestRes = Misskey.Endpoints['admin/kyunet/translation/test']['res'];
+// kyunet: feat/llm-translation - feat/image-translation
+// the image test answers in the same shape as the text test
+type TestRes = Misskey.Endpoints['admin/kyunet/translation/test']['res'] | Misskey.Endpoints['admin/kyunet/translation/test-image']['res'];
 
 const current = await misskeyApi('admin/kyunet/translation/show');
 
@@ -288,6 +362,8 @@ async function reload() {
 	apiKeySet.value = s.apiKeySet;
 	deeplAuthKeySet.value = s.deeplAuthKeySet;
 	deeplUsage.value = s.deeplUsage;
+	// kyunet: feat/llm-translation - feat/image-translation
+	imageApiKeySet.value = s.imageApiKeySet;
 	stats.value = s.stats;
 }
 
@@ -295,12 +371,91 @@ const testText = ref('');
 const testTargetLang = ref(miLocalStorage.getItem('lang') ?? 'ko-KR');
 const testing = ref(false);
 const testResult = ref<TestRes | null>(null);
+// kyunet: feat/llm-translation - feat/image-translation
+const testKind = ref<'text' | 'image'>('text');
 
 async function runTest() {
 	if (testText.value.trim() === '') return;
 	testing.value = true;
 	try {
 		testResult.value = await misskeyApi('admin/kyunet/translation/test', { text: testText.value, targetLang: testTargetLang.value });
+		// kyunet: feat/llm-translation - feat/image-translation
+		testKind.value = 'text';
+	} finally {
+		testing.value = false;
+	}
+}
+
+// kyunet: feat/llm-translation - feat/image-translation
+const imageApiKeySet = ref(current.imageApiKeySet);
+const defaultImageSystemPrompt = current.defaultImageSystemPrompt;
+
+const imageForm = reactive({
+	imageEnabled: current.imageEnabled,
+	imageSystemPrompt: current.imageSystemPrompt ?? '',
+	imageSeparateConnection: current.imageSeparateConnection,
+	imageBaseUrl: current.imageBaseUrl ?? '',
+	imageApiKey: '',
+	imageModel: current.imageModel ?? '',
+	imageExtraParams: JSON.stringify(current.imageExtraParams ?? {}, null, 2),
+	imageStructuredOutput: current.imageStructuredOutput,
+	imageTimeoutMs: current.imageTimeoutMs,
+	imageMaxConcurrency: current.imageMaxConcurrency,
+});
+
+const { model: imageMaxTokensParam, def: imageMaxTokensParamDef } = useMkSelect({
+	items: [
+		{ label: 'max_completion_tokens', value: 'max_completion_tokens' as const },
+		{ label: 'max_tokens', value: 'max_tokens' as const },
+	],
+	initialValue: current.imageMaxTokensParam,
+});
+
+async function saveImage() {
+	let imageExtraParams: Record<string, unknown>;
+	try {
+		imageExtraParams = imageForm.imageExtraParams.trim() === '' ? {} : JSON.parse(imageForm.imageExtraParams);
+		if (imageExtraParams == null || typeof imageExtraParams !== 'object' || Array.isArray(imageExtraParams)) throw new Error('not an object');
+	} catch {
+		os.alert({ type: 'error', text: i18n.ts._kyunetTranslation.extraParamsInvalidJson });
+		return;
+	}
+	await os.apiWithDialog('admin/kyunet/translation/update', {
+		imageEnabled: imageForm.imageEnabled,
+		imageSystemPrompt: imageForm.imageSystemPrompt,
+		imageSeparateConnection: imageForm.imageSeparateConnection,
+		imageBaseUrl: imageForm.imageBaseUrl,
+		...(imageForm.imageApiKey !== '' ? { imageApiKey: imageForm.imageApiKey } : {}),
+		imageModel: imageForm.imageModel,
+		imageExtraParams,
+		imageStructuredOutput: imageForm.imageStructuredOutput,
+		imageTimeoutMs: Number(imageForm.imageTimeoutMs),
+		imageMaxConcurrency: Number(imageForm.imageMaxConcurrency),
+		imageMaxTokensParam: imageMaxTokensParam.value,
+	});
+	imageForm.imageApiKey = '';
+	await reload();
+	fetchInstance(true);
+}
+
+async function deleteImageApiKey() {
+	const { canceled } = await os.confirm({ type: 'warning', text: i18n.ts._kyunetTranslation.deleteApiKeyConfirm });
+	if (canceled) return;
+	await os.apiWithDialog('admin/kyunet/translation/update', { imageApiKey: '' });
+	await reload();
+}
+
+async function runImageTest() {
+	const [file] = await chooseDriveFile({ multiple: false });
+	if (file == null) return;
+	if (!file.type.startsWith('image/')) {
+		os.alert({ type: 'error', text: i18n.ts._kyunetTranslation.notAnImage });
+		return;
+	}
+	testing.value = true;
+	try {
+		testResult.value = await misskeyApi('admin/kyunet/translation/test-image', { fileId: file.id, targetLang: testTargetLang.value });
+		testKind.value = 'image';
 	} finally {
 		testing.value = false;
 	}

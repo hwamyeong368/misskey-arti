@@ -42,8 +42,12 @@ function stripRegion(code: string): string {
 	}
 }
 
-/** "en, ja-JP" → "영어, 일본어" in the UI language; unknown or unsupported codes fall back to the code itself. */
+/**
+ * "en, ja-JP" → "영어, 일본어" in the UI language; unknown or unsupported codes fall back to the code itself.
+ * No codes at all reads as "unknown", like upstream's translator does when it cannot detect the language.
+ */
 export function kyunetLangNames(codes: readonly string[]): string {
+	if (codes.length === 0) return i18n.ts.unknown;
 	let names: Intl.DisplayNames | null = null;
 	try {
 		names = new Intl.DisplayNames([kyunetTargetLang()], { type: 'language', fallback: 'none' });

@@ -113,6 +113,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div v-if="appearNote.files && appearNote.files.length > 0">
 						<MkMediaList ref="galleryEl" :mediaList="appearNote.files" :user="appearNote.user"/>
 					</div>
+					<!-- kyunet: feat/llm-translation - feat/image-translation -->
+					<MkKyunetImageTranslation v-if="kyunetImageFileId != null" :files="kyunetImageFiles" :noteId="appearNote.id" :selectedFileId="kyunetImageFileId" @update:selectedFileId="kyunetImageFileId = $event"/>
 					<MkPoll
 						v-if="appearNote.poll"
 						:noteId="appearNote.id"
@@ -277,6 +279,9 @@ import MkNoteSub from '@/components/MkNoteSub.vue';
 import MkNoteSimple from '@/components/MkNoteSimple.vue';
 import MkReactionsViewer from '@/components/MkReactionsViewer.vue';
 import MkMediaList from '@/components/MkMediaList.vue';
+// kyunet: feat/llm-translation - feat/image-translation
+import MkKyunetImageTranslation from '@/components/MkKyunetImageTranslation.vue';
+import { isKyunetImageTranslationAvailable, createKyunetImageTranslationContext, KYUNET_IMAGE_TRANSLATION_KEY } from '@/composables/use-kyunet-image-translation.js';
 import MkCwButton from '@/components/MkCwButton.vue';
 import MkPoll from '@/components/MkPoll.vue';
 import MkUrlPreview from '@/components/MkUrlPreview.vue';
@@ -351,6 +356,13 @@ const {
 
 // provide
 provide(DI.mfmEmojiReactCallback, reactViaMfmEmoji);
+
+// kyunet: feat/llm-translation - feat/image-translation
+// the block shows one image at a time; opening the selected image again closes it
+const kyunetImageFiles = computed(() => (appearNote.files ?? []).filter(f => f.type.startsWith('image/')));
+const kyunetImageContext = createKyunetImageTranslationContext(() => kyunetImageFiles.value, () => {});
+const kyunetImageFileId = kyunetImageContext.selectedFileId;
+provide(KYUNET_IMAGE_TRANSLATION_KEY, isKyunetImageTranslationAvailable() && kyunetImageFiles.value.length > 0 ? kyunetImageContext : null);
 
 // MkNoteDetailed固有
 const tab = ref(props.initialTab);

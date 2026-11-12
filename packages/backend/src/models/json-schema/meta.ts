@@ -223,6 +223,11 @@ export const packedMetaLiteSchema = {
 			type: 'boolean',
 			optional: false, nullable: false,
 		},
+		// kyunet: feat/llm-translation - feat/image-translation
+		llmImageTranslatorAvailable: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
 		sentryForFrontend: {
 			type: 'object',
 			optional: false, nullable: true,

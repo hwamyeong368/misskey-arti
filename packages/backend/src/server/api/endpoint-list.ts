@@ -118,6 +118,8 @@ export * as 'admin/kyunet/translation/show' from './endpoints/admin/kyunet/trans
 export * as 'admin/kyunet/translation/update' from './endpoints/admin/kyunet/translation/update.js';
 export * as 'admin/kyunet/translation/test' from './endpoints/admin/kyunet/translation/test.js';
 export * as 'admin/kyunet/translation/clear-cache' from './endpoints/admin/kyunet/translation/clear-cache.js';
+// kyunet: feat/llm-translation - feat/image-translation
+export * as 'admin/kyunet/translation/test-image' from './endpoints/admin/kyunet/translation/test-image.js';
 export * as 'admin/update-proxy-account' from './endpoints/admin/update-proxy-account.js';
 export * as 'admin/update-user-note' from './endpoints/admin/update-user-note.js';
 export * as 'announcements' from './endpoints/announcements.js';
@@ -362,6 +364,8 @@ export * as 'notes/timeline' from './endpoints/notes/timeline.js';
 export * as 'notes/translate' from './endpoints/notes/translate.js';
 // kyunet: fork-only LLM translation endpoint
 export * as 'kyunet/translate' from './endpoints/kyunet/translate.js';
+// kyunet: feat/llm-translation - feat/image-translation
+export * as 'kyunet/translate-image' from './endpoints/kyunet/translate-image.js';
 export * as 'notes/unrenote' from './endpoints/notes/unrenote.js';
 export * as 'notes/update' from './endpoints/notes/update.js';
 export * as 'notes/user-list-timeline' from './endpoints/notes/user-list-timeline.js';

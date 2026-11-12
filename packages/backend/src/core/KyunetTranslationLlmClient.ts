@@ -8,7 +8,7 @@
 import { Injectable } from '@nestjs/common';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { bindThis } from '@/decorators.js';
-import type { MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
+import type { KyunetMaxTokensParam, MiKyunetTranslationSetting } from '@/models/KyunetTranslationSetting.js';
 
 export type TranslationKind = 'note' | 'user_name' | 'user_description' | 'user_field_name' | 'user_field_value';
 export type LlmInputItem = { i: number; kind: TranslationKind; text: string };
@@ -38,6 +38,37 @@ export const DEFAULT_SYSTEM_PROMPT = `You translate texts from a Misskey (fedive
 Output format:
 { "items": [ { "i": <same i>, "sourceLangs": [<BCP 47 codes of the original>], "text": <translation> } ] }
 Return one output item per input item.`;
+
+// kyunet: feat/llm-translation - feat/image-translation
+/** Connection a single LLM call uses; the image path builds it from either the text or the image* settings. */
+export type KyunetLlmConnection = {
+	baseUrl: string | null;
+	apiKey: string | null;
+	model: string | null;
+	extraParams: Record<string, unknown>;
+	structuredOutput: boolean;
+	timeoutMs: number;
+	maxConcurrency: number;
+	maxTokensParam: KyunetMaxTokensParam;
+	/** already resolved: the admin's value or the default; `{targetLang}` is still unreplaced */
+	systemPrompt: string;
+	/** which concurrency counter the call takes: the image path shares the text counter when it shares the server */
+	semaphoreScope: 'text' | 'image';
+};
+
+// Kept short for small vision models, which drop rules from long lists. Measured on samples: the multilingual-sign
+// rule holds only as its own bullet, and leaving out sender names holds only next to "what a reader needs".
+export const DEFAULT_IMAGE_SYSTEM_PROMPT = `Translate the text in the image into {targetLang}. Reply with JSON only.
+
+- Read the whole image first, and translate so it reads naturally as a whole, in the original's tone.
+- Follow the image's reading order. Write each block of text (a speech bubble, a message, a line of a sign) as one line, joining the line breaks inside it.
+- Leave an empty line between blocks from different speakers.
+- Translate only what a reader needs to follow the content: leave out interface text (sender names, times, buttons).
+- Text already in {targetLang} is not repeated: keep only the {targetLang} line and drop the lines that say the same in other languages.
+- No original text, no explanations. If there is no readable text, return an empty text.
+
+Output format:
+{ "sourceLangs": [<BCP 47 codes of the original text>], "text": <translation> }`;
 
 /** The whole prompt (output section included) is admin-editable; `{targetLang}` is replaced with the request's target language. */
 export function buildSystemPrompt(setting: MiKyunetTranslationSetting, targetLang: string): string {
@@ -97,19 +128,34 @@ function stripCodeFence(content: string): string {
 	return match ? match[1] : trimmed;
 }
 
-export function parseLlmResponse(json: unknown, expectedIndices: number[]): LlmOutputItem[] {
+// kyunet: feat/llm-translation - feat/image-translation
+// shared by the text and image parsers: first choice, not cut by the token limit, JSON content
+function parseChoiceJson(json: unknown): unknown {
 	const choice = (json as { choices?: unknown[] } | null)?.choices?.[0] as { finish_reason?: string; message?: { content?: unknown } } | undefined;
 	if (choice == null) throw new KyunetLlmError('no_choice', 'response has no choices');
 	if (choice.finish_reason === 'length') throw new KyunetLlmError('length', 'completion was cut by the token limit');
 	const content = choice.message?.content;
 	if (typeof content !== 'string') throw new KyunetLlmError('invalid_json', 'message.content is not a string');
 
-	let parsed: { items?: unknown };
 	try {
-		parsed = JSON.parse(stripCodeFence(content));
+		return JSON.parse(stripCodeFence(content));
 	} catch {
 		throw new KyunetLlmError('invalid_json', 'message.content is not JSON');
 	}
+}
+
+// the model sometimes repeats a code (["en","en"]); keep the first occurrence, order preserved
+function dedupeLangs(langs: string[]): string[] {
+	return [...new Set(langs.map(x => x.trim()).filter(x => x !== ''))];
+}
+
+function isStringArray(value: unknown): value is string[] {
+	return Array.isArray(value) && value.every(x => typeof x === 'string');
+}
+
+export function parseLlmResponse(json: unknown, expectedIndices: number[]): LlmOutputItem[] {
+	// kyunet: feat/llm-translation - feat/image-translation
+	const parsed = parseChoiceJson(json) as { items?: unknown } | null;
 
 	const items = parsed?.items;
 	if (!Array.isArray(items) || items.length !== expectedIndices.length) {
@@ -119,20 +165,71 @@ export function parseLlmResponse(json: unknown, expectedIndices: number[]): LlmO
 	for (const raw of items as Record<string, unknown>[]) {
 		if (
 			typeof raw?.i !== 'number'
-			|| !Array.isArray(raw.sourceLangs) || !raw.sourceLangs.every(x => typeof x === 'string')
+			// kyunet: feat/llm-translation - feat/image-translation
+			|| !isStringArray(raw.sourceLangs)
 			|| typeof raw.text !== 'string'
 		) {
 			throw new KyunetLlmError('invalid_item', 'item is missing i / sourceLangs / text');
 		}
-		// the model sometimes repeats a code (["en","en"]); keep the first occurrence, order preserved
-		const sourceLangs = [...new Set((raw.sourceLangs as string[]).map(x => x.trim()).filter(x => x !== ''))];
-		out.push({ i: raw.i, sourceLangs, text: raw.text });
+		out.push({ i: raw.i, sourceLangs: dedupeLangs(raw.sourceLangs), text: raw.text });
 	}
 	const seen = new Set(out.map(x => x.i));
 	if (seen.size !== expectedIndices.length || !expectedIndices.every(i => seen.has(i))) {
 		throw new KyunetLlmError('count_mismatch', 'index set does not match the request');
 	}
 	return out.sort((a, b) => a.i - b.i);
+}
+
+// kyunet: feat/llm-translation - feat/image-translation
+export type LlmImageInput = { mime: string; base64: string };
+export type LlmImageOutput = { sourceLangs: string[]; text: string };
+
+/** Fixed budget: the measured long manga page needed ~860 completion tokens. */
+export const IMAGE_MAX_COMPLETION_TOKENS = 4096;
+
+const IMAGE_RESPONSE_FORMAT = {
+	type: 'json_schema',
+	json_schema: {
+		name: 'image_translation',
+		strict: true,
+		schema: {
+			type: 'object',
+			additionalProperties: false,
+			required: ['sourceLangs', 'text'],
+			properties: {
+				sourceLangs: { type: 'array', items: { type: 'string' } },
+				text: { type: 'string' },
+			},
+		},
+	},
+} as const;
+
+export function buildImageRequestBody(conn: KyunetLlmConnection, targetLang: string, image: LlmImageInput): Record<string, unknown> {
+	const body: Record<string, unknown> = {
+		model: conn.model,
+		messages: [
+			{ role: 'system', content: conn.systemPrompt.replaceAll('{targetLang}', targetLang) },
+			{
+				role: 'user',
+				content: [
+					{ type: 'text', text: `Target language: ${targetLang}` },
+					{ type: 'image_url', image_url: { url: `data:${image.mime};base64,${image.base64}` } },
+				],
+			},
+		],
+		[conn.maxTokensParam]: Math.min(IMAGE_MAX_COMPLETION_TOKENS, MAX_COMPLETION_TOKENS_CAP),
+	};
+	if (conn.structuredOutput) body.response_format = IMAGE_RESPONSE_FORMAT;
+	const { messages: _ignored, ...extra } = conn.extraParams ?? {};
+	return { ...body, ...extra };
+}
+
+export function parseImageResponse(json: unknown): LlmImageOutput {
+	const parsed = parseChoiceJson(json) as { sourceLangs?: unknown; text?: unknown } | null;
+	if (!isStringArray(parsed?.sourceLangs) || typeof parsed.text !== 'string') {
+		throw new KyunetLlmError('invalid_item', 'response is missing sourceLangs / text');
+	}
+	return { sourceLangs: dedupeLangs(parsed.sourceLangs), text: parsed.text };
 }
 
 const ERROR_BODY_MAX_CHARS = 500;
@@ -146,13 +243,28 @@ export class KyunetTranslationLlmClient {
 
 	@bindThis
 	public async complete(setting: MiKyunetTranslationSetting, targetLang: string, items: LlmInputItem[]): Promise<{ items: LlmOutputItem[]; raw: unknown; latencyMs: number }> {
-		if (setting.baseUrl == null) throw new KyunetLlmError('http', 'baseUrl is not configured');
-		const url = `${setting.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+		// kyunet: feat/llm-translation - feat/image-translation
+		const { raw, latencyMs } = await this.post(setting, buildRequestBody(setting, targetLang, items));
+		const parsed = parseLlmResponse(raw, items.map(x => x.i));
+		return { items: parsed, raw, latencyMs };
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	@bindThis
+	public async completeImage(conn: KyunetLlmConnection, targetLang: string, image: LlmImageInput): Promise<{ result: LlmImageOutput; raw: unknown; latencyMs: number }> {
+		const { raw, latencyMs } = await this.post(conn, buildImageRequestBody(conn, targetLang, image));
+		return { result: parseImageResponse(raw), raw, latencyMs };
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	private async post(conn: Pick<KyunetLlmConnection, 'baseUrl' | 'apiKey' | 'timeoutMs'>, body: Record<string, unknown>): Promise<{ raw: unknown; latencyMs: number }> {
+		if (conn.baseUrl == null) throw new KyunetLlmError('http', 'baseUrl is not configured');
+		const url = `${conn.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 			Accept: 'application/json',
 		};
-		if (setting.apiKey != null && setting.apiKey !== '') headers['Authorization'] = `Bearer ${setting.apiKey}`;
+		if (conn.apiKey != null && conn.apiKey !== '') headers['Authorization'] = `Bearer ${conn.apiKey}`;
 
 		const started = Date.now();
 		let raw: unknown;
@@ -160,8 +272,8 @@ export class KyunetTranslationLlmClient {
 			const res = await this.httpRequestService.send(url, {
 				method: 'POST',
 				headers,
-				body: JSON.stringify(buildRequestBody(setting, targetLang, items)),
-				timeout: setting.timeoutMs,
+				body: JSON.stringify(body),
+				timeout: conn.timeoutMs,
 				isLocalAddressAllowed: true,
 			}, { throwErrorWhenResponseNotOk: false, validators: [] });
 			if (!res.ok) {
@@ -175,7 +287,6 @@ export class KyunetTranslationLlmClient {
 			const aborted = err instanceof Error && err.name === 'AbortError';
 			throw new KyunetLlmError(aborted ? 'timeout' : 'http', err instanceof Error ? err.message : String(err));
 		}
-		const parsed = parseLlmResponse(raw, items.map(x => x.i));
-		return { items: parsed, raw, latencyMs: Date.now() - started };
+		return { raw, latencyMs: Date.now() - started };
 	}
 }

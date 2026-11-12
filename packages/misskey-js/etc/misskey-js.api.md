@@ -275,6 +275,12 @@ type AdminKyunetTranslationClearCacheResponse = operations['admin___kyunet___tra
 type AdminKyunetTranslationShowResponse = operations['admin___kyunet___translation___show']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminKyunetTranslationTestImageRequest = operations['admin___kyunet___translation___test-image']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminKyunetTranslationTestImageResponse = operations['admin___kyunet___translation___test-image']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminKyunetTranslationTestRequest = operations['admin___kyunet___translation___test']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -1724,6 +1730,8 @@ declare namespace entities {
         AdminKyunetTranslationShowResponse,
         AdminKyunetTranslationTestRequest,
         AdminKyunetTranslationTestResponse,
+        AdminKyunetTranslationTestImageRequest,
+        AdminKyunetTranslationTestImageResponse,
         AdminKyunetTranslationUpdateRequest,
         AdminMetaResponse,
         AdminPromoCreateRequest,
@@ -2156,6 +2164,8 @@ declare namespace entities {
         InviteListResponse,
         KyunetTranslateRequest,
         KyunetTranslateResponse,
+        KyunetTranslateImageRequest,
+        KyunetTranslateImageResponse,
         MetaRequest,
         MetaResponse,
         MiauthGenTokenRequest,
@@ -3018,6 +3028,12 @@ type IWebhooksTestRequest = operations['i___webhooks___test']['requestBody']['co
 
 // @public (undocumented)
 type IWebhooksUpdateRequest = operations['i___webhooks___update']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type KyunetTranslateImageRequest = operations['kyunet___translate-image']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type KyunetTranslateImageResponse = operations['kyunet___translate-image']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type KyunetTranslateRequest = operations['kyunet___translate']['requestBody']['content']['application/json'];

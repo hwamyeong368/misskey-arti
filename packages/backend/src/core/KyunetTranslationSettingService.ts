@@ -13,13 +13,22 @@ import type { KyunetTranslationSettingsRepository } from '@/models/_.js';
 import type { MiKyunetTranslationSetting, KyunetTranslationProvider } from '@/models/KyunetTranslationSetting.js';
 import type { MiMeta } from '@/models/Meta.js';
 import { bindThis } from '@/decorators.js';
+// kyunet: feat/llm-translation - feat/image-translation
+import { DEFAULT_IMAGE_SYSTEM_PROMPT } from '@/core/KyunetTranslationLlmClient.js';
+import type { KyunetLlmConnection } from '@/core/KyunetTranslationLlmClient.js';
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 
 export const KYUNET_TRANSLATION_SETTING_ID = 'x';
 export const KYUNET_PUBSUB_CHANNEL = 'kyunet';
 
 export type KyunetTranslationSettingPatch = Partial<Omit<MiKyunetTranslationSetting, 'id' | 'updatedAt'>>;
-export type KyunetTranslationSettingPublic = Omit<MiKyunetTranslationSetting, 'apiKey'> & { apiKeySet: boolean };
+// kyunet: feat/llm-translation - feat/image-translation
+export type KyunetTranslationSettingPublic = Omit<MiKyunetTranslationSetting, 'apiKey' | 'imageApiKey'> & { apiKeySet: boolean; imageApiKeySet: boolean };
+
+// kyunet: feat/llm-translation - feat/image-translation
+function filled(value: string | null): boolean {
+	return value != null && value.trim() !== '';
+}
 
 @Injectable()
 export class KyunetTranslationSettingService implements OnModuleInit, OnApplicationShutdown {
@@ -103,6 +112,34 @@ export class KyunetTranslationSettingService implements OnModuleInit, OnApplicat
 		return this.isProviderConfigured(s, other) ? other : null;
 	}
 
+	// kyunet: feat/llm-translation - feat/image-translation
+	/** The image path's effective connection: image* fields only with imageSeparateConnection; the prompt is always image-only. */
+	@bindThis
+	public getImageConnection(): KyunetLlmConnection {
+		const s = this.get();
+		const systemPrompt = s.imageSystemPrompt ?? DEFAULT_IMAGE_SYSTEM_PROMPT;
+		if (!s.imageSeparateConnection) {
+			return {
+				baseUrl: s.baseUrl, apiKey: s.apiKey, model: s.model, extraParams: s.extraParams, structuredOutput: s.structuredOutput,
+				timeoutMs: s.timeoutMs, maxConcurrency: s.maxConcurrency, maxTokensParam: s.maxTokensParam, systemPrompt, semaphoreScope: 'text',
+			};
+		}
+		return {
+			baseUrl: s.imageBaseUrl, apiKey: s.imageApiKey, model: s.imageModel, extraParams: s.imageExtraParams, structuredOutput: s.imageStructuredOutput,
+			timeoutMs: s.imageTimeoutMs, maxConcurrency: s.imageMaxConcurrency, maxTokensParam: s.imageMaxTokensParam, systemPrompt, semaphoreScope: 'image',
+		};
+	}
+
+	// kyunet: feat/llm-translation - feat/image-translation
+	/** `llmImageTranslatorAvailable`: text translation on, image translation on, and the effective connection is complete. */
+	@bindThis
+	public isImageAvailable(): boolean {
+		if (this.cache == null) return false;
+		if (!this.cache.enabled || !this.cache.imageEnabled) return false;
+		const conn = this.getImageConnection();
+		return filled(conn.baseUrl) && filled(conn.model);
+	}
+
 	@bindThis
 	public async update(patch: KyunetTranslationSettingPatch): Promise<MiKyunetTranslationSetting> {
 		const set: Record<string, unknown> = { ...patch, updatedAt: new Date() };
@@ -110,6 +147,12 @@ export class KyunetTranslationSettingService implements OnModuleInit, OnApplicat
 			delete set.apiKey;
 		} else if (patch.apiKey === '') {
 			set.apiKey = null;
+		}
+		// kyunet: feat/llm-translation - feat/image-translation
+		if (patch.imageApiKey === undefined) {
+			delete set.imageApiKey;
+		} else if (patch.imageApiKey === '') {
+			set.imageApiKey = null;
 		}
 		// Upsert rather than update: the row may be gone (e.g. the e2e harness drops the schema after boot),
 		// and a plain update would then silently affect 0 rows while the in-memory cache looks updated.
@@ -124,7 +167,8 @@ export class KyunetTranslationSettingService implements OnModuleInit, OnApplicat
 
 	@bindThis
 	public toPublic(): KyunetTranslationSettingPublic {
-		const { apiKey, ...rest } = this.get();
-		return { ...rest, apiKeySet: apiKey != null && apiKey !== '' };
+		// kyunet: feat/llm-translation - feat/image-translation
+		const { apiKey, imageApiKey, ...rest } = this.get();
+		return { ...rest, apiKeySet: apiKey != null && apiKey !== '', imageApiKeySet: imageApiKey != null && imageApiKey !== '' };
 	}
 }
