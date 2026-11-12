@@ -464,13 +464,10 @@ describe('Confirmed drive deletion', () => {
 		assert.strictEqual((await api('drive/folders/show', { folderId: root.id }, owner)).status, 400);
 	});
 
-	test('deletes used selected files while preserving cleaner protection and owner boundaries', async () => {
+	test('deletes used selected files while keeping owner boundaries', async () => {
 		const used = await file();
 		const foreign = await file(undefined, other);
 		await post(owner, { text: 'attachment', fileIds: [used.id] });
-		const cleaned = await api('drive/files/delete-bulk', { fileIds: [used.id, foreign.id] }, owner);
-		assert.strictEqual(cleaned.status, 200);
-		assert.deepStrictEqual(cleaned.body.deletedIds, []);
 		const before = await api('drive', {}, owner);
 		const plan = await prepare({ fileIds: [used.id, used.id, foreign.id, '0000000000000000'] });
 		assert.strictEqual(plan.totalCount, 3);

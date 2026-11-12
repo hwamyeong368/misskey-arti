@@ -193,7 +193,6 @@ export * as 'drive/files/delete' from './endpoints/drive/files/delete.js';
 export * as 'drive/delete/prepare' from './endpoints/drive/delete/prepare.js';
 export * as 'drive/delete/execute' from './endpoints/drive/delete/execute.js';
 export * as 'drive/delete/status' from './endpoints/drive/delete/status.js';
-export * as 'drive/files/delete-bulk' from './endpoints/drive/files/delete-bulk.js';
 export * as 'drive/files/find' from './endpoints/drive/files/find.js';
 export * as 'drive/files/find-by-hash' from './endpoints/drive/files/find-by-hash.js';
 export * as 'drive/files/show' from './endpoints/drive/files/show.js';
