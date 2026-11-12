@@ -342,6 +342,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</MkSwitch>
 							</SearchMarker>
 
+							<SearchMarker :keywords="['voice', 'call', 'recording', 'ffmpeg']">
+								<MkInput v-model="federationForm.state.voiceCallMaxRecordingConversions" type="number" :min="0" :max="16" :step="1">
+									<template #label><SearchLabel>{{ i18n.ts._voiceCall.recordingConversionsTitle }}</SearchLabel><span v-if="federationForm.modifiedStates.voiceCallMaxRecordingConversions" class="_modified">{{ i18n.ts.modified }}</span></template>
+									<template #caption><SearchText>{{ i18n.ts._voiceCall.recordingConversionsDescription }}</SearchText></template>
+								</MkInput>
+							</SearchMarker>
+
 							<SearchMarker :keywords="['cache', 'remote', 'files']">
 								<MkSwitch v-model="federationForm.state.cacheRemoteFiles">
 									<template #label><SearchLabel>{{ i18n.ts.cacheRemoteFiles }}</SearchLabel><span v-if="federationForm.modifiedStates.cacheRemoteFiles" class="_modified">{{ i18n.ts.modified }}</span></template>
@@ -502,6 +509,7 @@ const federationForm = useForm({
 	proxyRemoteFiles: meta.proxyRemoteFiles,
 	allowExternalApRedirect: meta.allowExternalApRedirect,
 	enableRemoteVoiceCall: meta.enableRemoteVoiceCall,
+	voiceCallMaxRecordingConversions: meta.voiceCallMaxRecordingConversions,
 	cacheRemoteFiles: meta.cacheRemoteFiles,
 	cacheRemoteSensitiveFiles: meta.cacheRemoteSensitiveFiles,
 }, async (state) => {
@@ -513,6 +521,7 @@ const federationForm = useForm({
 		proxyRemoteFiles: state.proxyRemoteFiles,
 		allowExternalApRedirect: state.allowExternalApRedirect,
 		enableRemoteVoiceCall: state.enableRemoteVoiceCall,
+		voiceCallMaxRecordingConversions: state.voiceCallMaxRecordingConversions,
 		cacheRemoteFiles: state.cacheRemoteFiles,
 		cacheRemoteSensitiveFiles: state.cacheRemoteSensitiveFiles,
 	});

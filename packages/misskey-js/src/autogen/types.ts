@@ -6001,6 +6001,7 @@ export type components = {
             isMuted?: boolean;
             invitationExists?: boolean;
             isArchived: boolean;
+            allowRecording: boolean;
         };
         ChatRoomInvitation: {
             id: string;
@@ -10151,6 +10152,7 @@ export interface operations {
                         cacheRemoteFiles: boolean;
                         cacheRemoteSensitiveFiles: boolean;
                         enableRemoteVoiceCall: boolean;
+                        voiceCallMaxRecordingConversions: number;
                         emailRequiredForSignup: boolean;
                         enableHcaptcha: boolean;
                         hcaptchaSiteKey: string | null;
@@ -13814,6 +13816,7 @@ export interface operations {
                     allowExternalApRedirect?: boolean;
                     enableRemoteNotesCleaning?: boolean;
                     enableRemoteVoiceCall?: boolean;
+                    voiceCallMaxRecordingConversions?: number;
                     remoteNotesCleaningExpiryDaysForEachNotes?: number;
                     remoteNotesCleaningMaxProcessingDurationInMinutes?: number;
                     showRoleBadgesOfRemoteUsers?: boolean;
@@ -19703,6 +19706,7 @@ export interface operations {
                     name?: string;
                     description?: string;
                     isArchived?: boolean;
+                    allowRecording?: boolean;
                 };
             };
         };

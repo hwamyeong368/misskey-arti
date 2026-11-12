@@ -8596,21 +8596,53 @@ export interface Locale extends ILocale {
          */
         "moveChatRight": string;
         /**
-         * 録音ファイルをドライブに保存しました
+         * 録画ファイルをドライブに保存しました
          */
         "recordingSaved": string;
         /**
-         * 録音を開始
+         * 録画を開始
          */
         "startRecording": string;
         /**
-         * 録音を停止
+         * 録画を停止
          */
         "stopRecording": string;
         /**
-         * 録音中
+         * 録画中
          */
         "recording": string;
+        /**
+         * この通話は録画されています
+         */
+        "recordingInProgress": string;
+        /**
+         * この通話は録画されています。参加すると、あなたの声や共有した画面も録画に残ります。参加しますか？
+         */
+        "recordingJoinNotice": string;
+        /**
+         * {name}さんが録画を開始しました
+         */
+        "recordingStartedBy": ParameterizedString<"name">;
+        /**
+         * 録画が終了しました
+         */
+        "recordingStopped": string;
+        /**
+         * 通話の録画を許可
+         */
+        "allowRecording": string;
+        /**
+         * オンにすると、参加者が通話 (声と共有画面) を録画できます。録画が始まると全員に知らされます。
+         */
+        "allowRecordingDescription": string;
+        /**
+         * 録画の同時変換数
+         */
+        "recordingConversionsTitle": string;
+        /**
+         * 通話の録画を MP3/MP4 に変換する処理を同時にいくつまで行うかです。変換は重いので少なめにしてください。0 にすると変換せず、WebM のまま保存します。
+         */
+        "recordingConversionsDescription": string;
         "_quality": {
             /**
              * くっきり (1080p 15fps)
