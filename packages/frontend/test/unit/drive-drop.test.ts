@@ -168,7 +168,7 @@ test.each(targets)('folder drops on %s still use the folder update endpoint', as
 	const screen = await source(1);
 	const { element, folderId } = await target(screen, kind);
 	const dataTransfer = new DataTransfer();
-	dataTransfer.setData('cherrypick/drivefolders', JSON.stringify([{ id: 'other', name: 'Other', parentId: null }]));
+	dataTransfer.setData('misskey/drivefolders', JSON.stringify([{ id: 'other', name: 'Other', parentId: null }]));
 
 	await fireEvent.drop(element, { dataTransfer });
 	await waitFor(() => expect(requests('drive/folders/update')).toHaveLength(1));

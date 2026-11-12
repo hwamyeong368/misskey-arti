@@ -47,8 +47,8 @@ test.each(errors)('prepare $code shows the common API error without reporting an
 	expect(dialogs).toContainEqual(expect.objectContaining(error.code === 'RATE_LIMIT_EXCEEDED'
 		? { type: 'error', title: i18n.ts.cannotPerformTemporary, text: i18n.ts.cannotPerformTemporaryDescription }
 		: { type: 'error', text: error.code === 'NO_SUCH_FOLDER'
-			? 'The folder to delete could not be found. Refresh the list.'
-			: 'The selection is invalid. Reselect the files or folder to delete.' }));
+			? i18n.ts._driveDeletion.folderUnavailable
+			: i18n.ts._driveDeletion.invalidSelection }));
 	expect(os.alert).not.toHaveBeenCalled();
 	expect(os.confirm).not.toHaveBeenCalled();
 	expect(result).toBeNull();
@@ -63,7 +63,7 @@ test('a prepare network failure shows retry guidance without a confirmation or d
 	const result = await deleteDriveItems({ fileIds: ['one'] });
 
 	expect(os.popups.value.map(popup => popup.props)).toContainEqual(expect.objectContaining({
-		type: 'error', text: 'Unable to start deletion. Please try again.',
+		type: 'error', text: i18n.ts._driveDeletion.prepareFailed,
 	}));
 	expect(os.alert).not.toHaveBeenCalled();
 	expect(os.confirm).not.toHaveBeenCalled();

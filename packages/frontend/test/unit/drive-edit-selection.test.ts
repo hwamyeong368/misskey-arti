@@ -126,7 +126,7 @@ function requests(endpoint: string) {
 }
 
 function expectCount(screen: ReturnType<typeof drive>, count: number) {
-	expect(screen.getByRole('status').textContent).toMatch(new RegExp(`\\b${count}$`));
+	expect(screen.getByRole('status').textContent).toMatch(new RegExp(`(?<!\\d)${count}\\D*$`));
 }
 
 async function selectAcrossFolders(screen: ReturnType<typeof drive>, shiftKey: boolean) {
@@ -147,7 +147,7 @@ test('folder navigation limits the visible count, confirmation and delete reques
 
 	await waitFor(() => expect(requests('drive/delete/execute')).toHaveLength(1));
 	expect(requests('drive/delete/prepare')).toEqual([{ fileIds: ['face'], i: 'unit-token' }]);
-	expect(countBeforeDelete).toMatch(/\b1$/);
+	expect(countBeforeDelete).toMatch(/(?<!\d)1\D*$/);
 	expect(vi.mocked(os.confirm).mock.calls[0][0].text).toContain('1');
 	expect(files.map(file => file.id)).toContain('light');
 	await waitFor(() => expectCount(screen, 0));

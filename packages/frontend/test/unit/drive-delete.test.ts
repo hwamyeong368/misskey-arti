@@ -12,6 +12,7 @@ vi.mock('@/i.js', () => ({ $i: { token: 'unit-token' } }));
 import * as os from '@/os.js';
 import { prefer } from '@/preferences.js';
 import { deleteDriveItems } from '@/utility/drive-delete.js';
+import { i18n } from '@/i18n.js';
 
 const done = {
 	operationId: '00000000-0000-0000-0000-000000000000', totalCount: 2,
@@ -112,22 +113,22 @@ test.each([
 	{
 		name: '103 deleted files without zero-valued outcomes',
 		response: { ...emptyResult, totalCount: 103, deletedCount: 103, deletedIds: Array.from({ length: 103 }, (_, index) => `file-${index}`) },
-		text: 'Files deleted: 103.', type: 'success',
+		text: i18n.tsx._driveDeletion.deletedFiles({ count: 103 }), type: 'success',
 	},
 	{
 		name: 'empty folders without inventing a file deletion',
 		response: { ...emptyResult, deletedFolderIds: ['root', 'child'], folderDeleted: true },
-		text: 'Folders deleted: 2.', type: 'success',
+		text: i18n.tsx._driveDeletion.deletedFolders({ count: 2 }), type: 'success',
 	},
 	{
 		name: 'a folder that was already removed',
 		response: { ...emptyResult, missingFolderIds: ['root'], folderDeleted: true },
-		text: 'Folders already missing or unavailable: 1.', type: 'success',
+		text: i18n.tsx._driveDeletion.missingFolders({ count: 1 }), type: 'success',
 	},
 	{
 		name: 'no deleted items without an empty message',
 		response: emptyResult,
-		text: 'No items were deleted.', type: 'success',
+		text: i18n.ts._driveDeletion.noItemsDeleted, type: 'success',
 	},
 	{
 		name: 'all nonzero outcomes and the next action',
@@ -135,7 +136,7 @@ test.each([
 			...emptyResult, totalCount: 9, deletedCount: 2, deletedIds: ['one', 'two'], deletedFolderIds: ['child'],
 			missingCount: 3, missingIds: ['gone-one', 'gone-two', 'gone-three'], failedCount: 4, remainingCount: 4, remainingFoldersCount: 1,
 		},
-		text: 'Files deleted: 2.\nFolders deleted: 1.\nFiles already missing or unavailable: 3.\nFailed files: 4.\nFiles remaining: 4.\nFolders remaining: 1.\nCheck the remaining items and retry deletion.', type: 'warning',
+		text: [i18n.tsx._driveDeletion.deletedFiles({ count: 2 }), i18n.tsx._driveDeletion.deletedFolders({ count: 1 }), i18n.tsx._driveDeletion.missingFiles({ count: 3 }), i18n.tsx._driveDeletion.failedFiles({ count: 4 }), i18n.tsx._driveDeletion.remainingFiles({ count: 4 }), i18n.tsx._driveDeletion.remainingFolders({ count: 1 }), i18n.ts._driveDeletion.retry].join('\n'), type: 'warning',
 	},
 ])('reports $name through the deletion result dialog', async ({ response, text, type }) => {
 	fetchMock.mockResponses(JSON.stringify({ operationId: response.operationId, totalCount: response.totalCount }), JSON.stringify(response));
@@ -162,6 +163,6 @@ test('an interrupted deletion keeps nonzero result counts with concise recovery 
 	expect(result).toEqual(partial);
 	expect(vi.mocked(os.alert).mock.calls.at(-1)?.[0]).toEqual({
 		type: 'error',
-		text: 'Files deleted: 1.\nFiles remaining: 2.\nDeletion was interrupted. Check the remaining files and folders.',
+		text: [i18n.tsx._driveDeletion.deletedFiles({ count: 1 }), i18n.tsx._driveDeletion.remainingFiles({ count: 2 }), i18n.ts._driveDeletion.interrupted].join('\n'),
 	});
 });

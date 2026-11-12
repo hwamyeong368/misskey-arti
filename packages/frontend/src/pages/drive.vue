@@ -30,6 +30,5 @@ definePage(() => ({
 	title: folder.value ? folder.value.name : i18n.ts.drive,
 	icon: 'ti ti-cloud',
 	hideHeader: true,
-	mobileFooterInFlow: true,
 }));
 </script>
